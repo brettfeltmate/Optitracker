@@ -9,7 +9,7 @@ from klibs import P
 from klibs.KLCommunication import message
 from klibs.KLGraphics import KLDraw as kld
 from klibs.KLGraphics import blit, fill, flip
-from klibs.KLUserInterface import ui_request
+from klibs.KLUserInterface import ui_request, any_key
 from klibs.KLUtilities import pump
 from klibs.KLBoundary import BoundaryInspector, CircleBoundary
 
@@ -69,7 +69,12 @@ class live_test_optitracker(klibs.Experiment):
         pass
 
     def trial_prep(self):
-        pass
+
+        fill()
+        message("Press any key to start the trial, & cmd-q to quit", location = P.screen_c, registration=5, blit_txt=True)
+        flip()
+
+        any_key()
 
     def trial(self):  # type: ignore
 
