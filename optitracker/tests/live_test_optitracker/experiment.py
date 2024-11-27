@@ -30,6 +30,7 @@ RED = [255, 0, 0, 255]
 BLUE = [0, 0, 255, 255]
 GREEN = [0, 255, 0, 255]
 
+
 class live_test_optitracker(klibs.Experiment):
 
     def setup(self):
@@ -89,7 +90,7 @@ class live_test_optitracker(klibs.Experiment):
             cursor_vel = self.ot.velocity() * 100
 
             which_bound = self.bi.which_boundary(
-                [cursor_pos["pos_x"], cursor_pos["pos_z"]]
+                (cursor_pos["pos_x"], cursor_pos["pos_z"])
             )
 
             if which_bound is not None:
@@ -111,7 +112,7 @@ class live_test_optitracker(klibs.Experiment):
             message(
                 text=msg,
                 location=[P.screen_c[0] // 10, P.screen_c[1] // 10],  # type: ignore
-                registration=1,
+                registration=7,
                 blit_txt=True,
             )
 
