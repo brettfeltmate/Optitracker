@@ -4,6 +4,9 @@
 import os
 from csv import DictWriter
 
+import numpy
+from pprint import pprint
+
 import klibs
 from klibs import P
 from klibs.KLCommunication import message
@@ -17,10 +20,10 @@ from klibs.KLBoundary import BoundaryInspector, CircleBoundary
 from natnetclient_rough import NatNetClient  # type: ignore[import]
 from OptiTracker import OptiTracker  # type: ignore[import]
 
-PX_MM = int(P.ppi / 2.54) // 10  # pixels per mm
-OFFSET = PX_MM * 100
-BOUNDARY_DIAM = PX_MM * 50
-BRIMWIDTH = PX_MM * 5
+# self.px_mm = int(P.ppi / 2.54) // 10  # pixels per mm
+# OFFSET = self.px_mm * 100
+# BOUNDARY_DIAM = self.px_mm * 50
+# BRIMWIDTH = self.px_mm * 5
 
 LEFT = "left"
 RIGHT = "right"
@@ -34,9 +37,14 @@ GREEN = [0, 255, 0, 255]
 class live_test_optitracker(klibs.Experiment):
 
     def setup(self):
-        self.data_file = f"test_optitracker_data_run{P.participant_id}.csv"
+        self.px_mm = int(P.ppi / 2.54) // 10  # pixels per mm
+        OFFSET = self.px_mm * 100
+        BOUNDARY_DIAM = self.px_mm * 50
+        BRIMWIDTH = self.px_mm * 5
 
-        self.ot = OptiTracker()
+        self.data_file = f"test_optitracker_data_run.csv"
+
+        self.ot = OptiTracker(marker_count = 3)
         self.ot.window_size = 2
         self.ot.data_dir = self.data_file
 
@@ -76,7 +84,12 @@ class live_test_optitracker(klibs.Experiment):
 
         any_key()
 
+        fill()
+        flip()
+        self.nnc.startup()
+
     def trial(self):  # type: ignore
+
 
         while True:
             q = pump()
@@ -84,19 +97,20 @@ class live_test_optitracker(klibs.Experiment):
 
             fill()
 
-            for loc in self.locs.values():
-                blit(self.placeholders[loc], location=loc, registration=5)
+            for loc in self.locs.keys():
+                blit(self.placeholders[loc], location=self.locs[loc], registration=5)
 
             cursor_pos = self.ot.position()
-            cursor_pos["pos_x"] = cursor_pos["pos_x"] * 100
-            cursor_pos["pos_y"] = cursor_pos["pos_y"] * 100
-            cursor_pos["pos_z"] = cursor_pos["pos_z"] * 100
+            cursor_pos["pos_x"] = (cursor_pos["pos_x"] * 1000)
+            cursor_pos["pos_y"] = (cursor_pos["pos_y"] * 1000)
+            cursor_pos["pos_z"] = (cursor_pos["pos_z"] * 1000)
+
+            pos = [int(cursor_pos["pos_x"][-1]), int(cursor_pos["pos_z"][-1])]
+            pos = [p * self.px_mm for p in pos]
 
             cursor_vel = self.ot.velocity() * 100
 
-            which_bound = self.bi.which_boundary(
-                (cursor_pos["pos_x"], cursor_pos["pos_z"])
-            )
+            which_bound = self.bi.which_boundary( pos )
 
             if which_bound is not None:
                 self.cursor.fill = self.placeholders[which_bound].fill
@@ -104,15 +118,12 @@ class live_test_optitracker(klibs.Experiment):
             else:
                 self.cursor.fill = [255, 255, 255, 255]
 
-            blit(self.cursor, location=cursor_pos, registration=5)
+            blit(self.cursor, location=pos, registration=5)
 
-            msg = (
-                f"X: {cursor_pos["pos_x"]}\n"
-                + f"Y: {cursor_pos["pos_y"]}\n"
-                + f"Z: {cursor_pos["pos_z"]}\n"
-                + f"Vel: {cursor_vel}\n"
-                + f"Bound: {which_bound}"
-            )
+            msg = f"X: {pos[0]}\n"
+            msg += f"Z: {pos[1]}\n"
+            msg += f"Vel: {cursor_vel}\n"
+            msg += f"Bound: {which_bound}"
 
             message(
                 text=msg,
@@ -138,10 +149,11 @@ class live_test_optitracker(klibs.Experiment):
             marker_set (dict): Dictionary containing marker data to be written.
                 Expected format: {'markers': [{'key1': val1, ...}, ...]}
         """
+        # print(marker_set["markers"][0].keys())
         with open(self.data_file, "a", newline="") as file:
             writer = DictWriter(file, fieldnames=marker_set["markers"][0].keys())
-            if not os.path.exists(self.data_file):
-                writer.writeheader()
+            # if not os.path.exists(self.data_file):
+            #     writer.writeheader()
 
             for marker in marker_set.get("markers", None):
                 writer.writerow(marker)

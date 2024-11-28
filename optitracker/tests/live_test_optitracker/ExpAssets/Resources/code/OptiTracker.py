@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from pprint import pprint
 
 # TODO:
 #  - grab first frame, row count indicates num markers tracked.
@@ -176,7 +177,7 @@ class OptiTracker(object):
         means = np.zeros(
             len(frames) // self.__marker_count,
             dtype=[
-                ("frame", "i8"),
+                ("frame_number", "i8"),
                 ("pos_x", "f8"),
                 ("pos_y", "f8"),
                 ("pos_z", "f8"),
@@ -220,7 +221,7 @@ class OptiTracker(object):
         with open(self._data_dir, "r") as file:
             header = file.readline().strip().split(",")
 
-        if any(col not in header for col in ["frame", "pos_x", "pos_y", "pos_z"]):
+        if any(col not in header for col in ["_io", "frame_number", "pos_x", "pos_y", "pos_z"]):
             raise ValueError(
                 "Data file must contain columns named frame, pos_x, pos_y, pos_z."
             )
@@ -232,7 +233,7 @@ class OptiTracker(object):
                 (
                     "float"
                     if name in ["pos_x", "pos_y", "pos_z"]
-                    else "int" if name == "frame" else "U32"
+                    else "int" if name == "frame_number" else "U32"
                 ),
             )
             for name in header
@@ -247,10 +248,10 @@ class OptiTracker(object):
             num_frames = self._window_size
 
         # Calculate which frames to include
-        last_frame = data["frame"][-1]
+        last_frame = data["frame_number"][-1]
         lookback = last_frame - num_frames
 
         # Filter for relevant frames
-        data = data[data["frame"] > lookback]
+        data = data[data["frame_number"] > lookback]
 
         return data
