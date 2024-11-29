@@ -44,7 +44,7 @@ class live_test_optitracker(klibs.Experiment):
         # self.path = Path('.')
         # self.data_file = self.path / "test_optitracker_data_run.csv"
 
-        self.data_file = os.getcwd() + "/test_optitracker_data_run_{}.csv".format(P.p_id)
+        self.data_file = os.getcwd() + "\test_optitracker_data_run_{}.csv".format(P.p_id)
         print(self.data_file)
 
         self.ot = OptiTracker(marker_count=3)
