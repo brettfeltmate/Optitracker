@@ -10,7 +10,7 @@ from klibs import P
 from klibs.KLCommunication import message
 from klibs.KLGraphics import KLDraw as kld
 from klibs.KLGraphics import blit, fill, flip
-from klibs.KLUserInterface import ui_request, any_key
+from klibs.KLUserInterface import ui_request, any_key, smart_sleep
 from klibs.KLUtilities import pump
 from klibs.KLBoundary import BoundaryInspector, CircleBoundary
 
@@ -18,13 +18,9 @@ from klibs.KLBoundary import BoundaryInspector, CircleBoundary
 from natnetclient_rough import NatNetClient  # type: ignore[import]
 from OptiTracker import OptiTracker  # type: ignore[import]
 
-LEFT = "left"
-RIGHT = "right"
-CENTER = "center"
-
-RED = [255, 0, 0, 255]
-BLUE = [0, 0, 255, 255]
-GREEN = [0, 255, 0, 255]
+RED = "red"
+BLUE = "blue"
+GREEN = "green"
 
 
 class live_test_optitracker(klibs.Experiment):
@@ -47,32 +43,38 @@ class live_test_optitracker(klibs.Experiment):
         self.data_file = os.getcwd() + "\\test_optitracker_data_run_{}.csv".format(P.p_id)
 
         self.ot = OptiTracker(marker_count=3)
-        self.ot.window_size = 2
+        self.ot.window_size = 10
         self.ot.data_dir = self.data_file
 
         self.nnc = NatNetClient()
         self.nnc.markers_listener = self.marker_set_listener
 
+        self.fills = {
+            RED: [255, 000, 000, 255],
+            GREEN: [000, 255, 000, 255],
+            BLUE: [000, 000, 255, 255]
+        }
+
         self.locs = {
-            LEFT: (P.screen_c[0] - OFFSET, P.screen_c[1]),  # type: ignore
-            CENTER: P.screen_c,  # type: ignore
-            RIGHT: (P.screen_c[0] + OFFSET, P.screen_c[1]),  # type: ignore
+            RED: (P.screen_c[0] - OFFSET, P.screen_c[1]),  # type: ignore
+            GREEN: P.screen_c,  # type: ignore
+            BLUE: (P.screen_c[0] + OFFSET, P.screen_c[1]),  # type: ignore
         }
 
         self.placeholders = {
-            LEFT: kld.Annulus(BOUNDARY_DIAM, BRIMWIDTH, fill=RED),
-            CENTER: kld.Annulus(BOUNDARY_DIAM, BRIMWIDTH, fill=GREEN),
-            RIGHT: kld.Annulus(BOUNDARY_DIAM, BRIMWIDTH, fill=BLUE),
+            RED: kld.Annulus(BOUNDARY_DIAM, BRIMWIDTH, fill=self.fills[RED]),
+            GREEN: kld.Annulus(BOUNDARY_DIAM, BRIMWIDTH, fill=self.fills[GREEN]),
+            BLUE: kld.Annulus(BOUNDARY_DIAM, BRIMWIDTH, fill=self.fills[BLUE]),
         }
 
         self.cursor = kld.Circle(BOUNDARY_DIAM // 2, fill=[255, 255, 255, 255])
 
-        self.left_boundary = CircleBoundary(LEFT, self.locs[LEFT], BOUNDARY_DIAM)
-        self.right_boundary = CircleBoundary(RIGHT, self.locs[LEFT], BOUNDARY_DIAM)
-        self.center_boundary = CircleBoundary(CENTER, self.locs[LEFT], BOUNDARY_DIAM)
+        self.red_boundary = CircleBoundary(RED, self.locs[RED], BOUNDARY_DIAM)
+        self.green_boundary = CircleBoundary(GREEN, self.locs[GREEN], BOUNDARY_DIAM)
+        self.blue_boundary = CircleBoundary(BLUE, self.locs[BLUE], BOUNDARY_DIAM)
 
         self.bi = BoundaryInspector(
-            [self.left_boundary, self.right_boundary, self.center_boundary]
+            [self.red_boundary, self.blue_boundary, self.green_boundary]
         )
 
     def block(self):
@@ -95,6 +97,8 @@ class live_test_optitracker(klibs.Experiment):
         flip()
         self.nnc.startup()
 
+        smart_sleep(100)
+
     def trial(self):  # type: ignore
 
         while True:
@@ -103,8 +107,8 @@ class live_test_optitracker(klibs.Experiment):
 
             fill()
 
-            for loc in self.locs.keys():
-                blit(self.placeholders[loc], location=self.locs[loc], registration=5)
+            for key in self.locs.keys():
+                blit(self.placeholders[key], location=self.locs[key], registration=5)
 
             cursor_pos = self.ot.position()
             cursor_pos["pos_x"] = cursor_pos["pos_x"] * 1000
@@ -119,7 +123,7 @@ class live_test_optitracker(klibs.Experiment):
             which_bound = self.bi.which_boundary(pos)
 
             if which_bound is not None:
-                self.cursor.fill = self.placeholders[which_bound].fill
+                self.cursor.fill = self.fills[which_bound]
 
             else:
                 self.cursor.fill = [255, 255, 255, 255]
