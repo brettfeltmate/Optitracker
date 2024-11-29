@@ -2,10 +2,8 @@
 
 # external libs
 import os
+from pathlib import Path
 from csv import DictWriter
-
-import numpy
-from pprint import pprint
 
 import klibs
 from klibs import P
@@ -20,11 +18,6 @@ from klibs.KLBoundary import BoundaryInspector, CircleBoundary
 from natnetclient_rough import NatNetClient  # type: ignore[import]
 from OptiTracker import OptiTracker  # type: ignore[import]
 
-# self.px_mm = int(P.ppi / 2.54) // 10  # pixels per mm
-# OFFSET = self.px_mm * 100
-# BOUNDARY_DIAM = self.px_mm * 50
-# BRIMWIDTH = self.px_mm * 5
-
 LEFT = "left"
 RIGHT = "right"
 CENTER = "center"
@@ -37,14 +30,24 @@ GREEN = [0, 255, 0, 255]
 class live_test_optitracker(klibs.Experiment):
 
     def setup(self):
+        # self.dir = {}
+        # self.dir["root"] = Path('.')
+        # self.dir["optidata"] = self.dir["root"] / "optitracker_data"
+        # self.
+
+
         self.px_mm = int(P.ppi / 2.54) // 10  # pixels per mm
         OFFSET = self.px_mm * 100
         BOUNDARY_DIAM = self.px_mm * 50
         BRIMWIDTH = self.px_mm * 5
 
-        self.data_file = f"test_optitracker_data_run.csv"
+        # self.path = Path('.')
+        # self.data_file = self.path / "test_optitracker_data_run.csv"
 
-        self.ot = OptiTracker(marker_count = 3)
+        self.data_file = os.getcwd() + "/test_optitracker_data_run.csv"
+        print(self.data_file)
+
+        self.ot = OptiTracker(marker_count=3)
         self.ot.window_size = 2
         self.ot.data_dir = self.data_file
 
@@ -79,7 +82,12 @@ class live_test_optitracker(klibs.Experiment):
     def trial_prep(self):
 
         fill()
-        message("Press any key to start the trial, & cmd-q to quit", location = P.screen_c, registration=5, blit_txt=True)
+        message(
+            "Press any key to start the trial, & cmd-q to quit",
+            location=P.screen_c,
+            registration=5,
+            blit_txt=True,
+        )
         flip()
 
         any_key()
@@ -89,7 +97,6 @@ class live_test_optitracker(klibs.Experiment):
         self.nnc.startup()
 
     def trial(self):  # type: ignore
-
 
         while True:
             q = pump()
@@ -101,16 +108,16 @@ class live_test_optitracker(klibs.Experiment):
                 blit(self.placeholders[loc], location=self.locs[loc], registration=5)
 
             cursor_pos = self.ot.position()
-            cursor_pos["pos_x"] = (cursor_pos["pos_x"] * 1000)
-            cursor_pos["pos_y"] = (cursor_pos["pos_y"] * 1000)
-            cursor_pos["pos_z"] = (cursor_pos["pos_z"] * 1000)
+            cursor_pos["pos_x"] = cursor_pos["pos_x"] * 1000
+            cursor_pos["pos_y"] = cursor_pos["pos_y"] * 1000
+            cursor_pos["pos_z"] = cursor_pos["pos_z"] * 1000
 
-            pos = [int(cursor_pos["pos_x"][-1]), int(cursor_pos["pos_z"][-1])]
-            pos = [p * self.px_mm for p in pos]
+            pos = [cursor_pos["pos_x"][0], cursor_pos["pos_z"][0]]
+            pos = [int(p * self.px_mm) for p in pos]
 
             cursor_vel = self.ot.velocity() * 100
 
-            which_bound = self.bi.which_boundary( pos )
+            which_bound = self.bi.which_boundary(pos)
 
             if which_bound is not None:
                 self.cursor.fill = self.placeholders[which_bound].fill
@@ -152,8 +159,8 @@ class live_test_optitracker(klibs.Experiment):
         # print(marker_set["markers"][0].keys())
         with open(self.data_file, "a", newline="") as file:
             writer = DictWriter(file, fieldnames=marker_set["markers"][0].keys())
-            # if not os.path.exists(self.data_file):
-            #     writer.writeheader()
+            if not os.path.exists(self.data_file):
+                writer.writeheader()
 
             for marker in marker_set.get("markers", None):
                 writer.writerow(marker)
