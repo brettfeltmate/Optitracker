@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from scipy.signal import butter, lfilter, freqz, filtfilt
+from scipy.signal import butter, lfilter, freqz, sosfiltfilt
 
 # TODO:
 #  - grab first frame, row count indicates num markers tracked.
@@ -191,23 +191,13 @@ class OptiTracker(object):
         )
 
 
-        butt = butter(order=order, Wn=cutoff, bytype=filtype, output="Sos", fs=self._sample_rate)
+        butt = butter(N=order, Wn=cutoff, btype=filtype, output="sos", fs=self._sample_rate)
 
-
-        # Group by marker (every nth row where n is marker_count)
-        for frame in range(1, len(frames) // self.__marker_count + 1):
-            frame_data = frames[frame,]
-
-            # Apply filter to each axis
-            smooth[frame]["pos_x"] = filtfilt(butt, frame_data["pos_x"])
-            smooth[frame]["pos_y"] = filtfilt(butt, frame_data["pos_y"])
-            smooth[frame]["pos_z"] = filtfilt(butt, frame_data["pos_z"])
-
+        smooth["pos_x"] = sosfiltfilt(sos=butt, x=frames["pos_x"], padlen=None)
+        smooth["pos_y"] = sosfiltfilt(sos=butt, x=frames["pos_y"], padlen=None)
+        smooth["pos_z"] = sosfiltfilt(sos=butt, x=frames["pos_z"], padlen=None)
 
         return smooth
-
-
-
 
     def __column_means(self, frames: np.ndarray = np.array([])) -> np.ndarray:
         """
