@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from pprint import pprint
+from scipy.signal import butter, lfilter, freqz
 
 # TODO:
 #  - grab first frame, row count indicates num markers tracked.
@@ -134,7 +134,7 @@ class OptiTracker(object):
 
         euclidean_distance = self.__euclidean_distance(frames)
 
-        return euclidean_distance / (1 / self._sample_rate)
+        return euclidean_distance / (frames.shape[0] / self._sample_rate)
 
     def __euclidean_distance(self, frames: np.ndarray = np.array([])) -> float:
         """
@@ -159,6 +159,9 @@ class OptiTracker(object):
                 + (positions["pos_z"][-1] - positions["pos_z"][0]) ** 2
             )
         )
+
+    # TODO: reduce dependencies by hand-rolling a butterworth filter
+    # TODO: but first make sure this isn't a bad idea.
 
     def __column_means(self, frames: np.ndarray = np.array([])) -> np.ndarray:
         """
@@ -221,7 +224,7 @@ class OptiTracker(object):
         with open(self._data_dir, "r") as file:
             header = file.readline().strip().split(",")
 
-        if any(col not in header for col in ["_io", "frame_number", "pos_x", "pos_y", "pos_z"]):
+        if any(col not in header for col in ["frame_number", "pos_x", "pos_y", "pos_z"]):
             raise ValueError(
                 "Data file must contain columns named frame, pos_x, pos_y, pos_z."
             )
