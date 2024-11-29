@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from scipy.signal import butter, lfilter, freqz
+from scipy.signal import butter, lfilter, freqz, filtfilt
 
 # TODO:
 #  - grab first frame, row count indicates num markers tracked.
@@ -162,6 +162,10 @@ class OptiTracker(object):
 
     # TODO: reduce dependencies by hand-rolling a butterworth filter
     # TODO: but first make sure this isn't a bad idea.
+
+    def __smooth(self, order=2, cutoff=10, filtype="low", frames: np.ndarray = np.array([])) -> np.ndarray:
+
+
 
     def __column_means(self, frames: np.ndarray = np.array([])) -> np.ndarray:
         """
