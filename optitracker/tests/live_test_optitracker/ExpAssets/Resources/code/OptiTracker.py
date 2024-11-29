@@ -164,6 +164,48 @@ class OptiTracker(object):
     # TODO: but first make sure this isn't a bad idea.
 
     def __smooth(self, order=2, cutoff=10, filtype="low", frames: np.ndarray = np.array([])) -> np.ndarray:
+        """
+        Apply a Butterworth filter to the position data.
+
+        Args:
+            order (int, optional): Order of the Butterworth filter. Defaults to 2.
+            cutoff (int, optional): Cutoff frequency in Hz. Defaults to 10.
+            filtype (str, optional): Type of filter to apply. Defaults to "low".
+            frames (np.ndarray, optional): Array of frame data; queries last window_size frames if empty.
+
+        Returns:
+            np.ndarray: Array of filtered positions
+        """
+        if len(frames) == 0:
+            frames = self.__query_frames()
+
+        # Create output array with the correct dtype
+        smooth = np.zeros(
+            len(frames),
+            dtype=[
+                ("frame_number", "i8"),
+                ("pos_x", "f8"),
+                ("pos_y", "f8"),
+                ("pos_z", "f8"),
+            ],
+        )
+
+
+        butt = butter(order=order, Wn=cutoff, bytype=filtype, output="Sos", fs=self._sample_rate)
+
+
+        # Group by marker (every nth row where n is marker_count)
+        for frame in range(1, len(frames) // self.__marker_count + 1):
+            frame_data = frames[frame,]
+
+            # Apply filter to each axis
+            smooth[frame]["pos_x"] = filtfilt(butt, frame_data["pos_x"])
+            smooth[frame]["pos_y"] = filtfilt(butt, frame_data["pos_y"])
+            smooth[frame]["pos_z"] = filtfilt(butt, frame_data["pos_z"])
+
+
+        return smooth
+
 
 
 
@@ -260,5 +302,7 @@ class OptiTracker(object):
 
         # Filter for relevant frames
         data = data[data["frame_number"] > lookback]
+
+        data = self.__smooth(frames=data)
 
         return data
