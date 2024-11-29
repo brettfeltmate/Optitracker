@@ -133,7 +133,7 @@ class OptiTracker(object):
 
         euclidean_distance = self.__euclidean_distance(frames)
 
-        return euclidean_distance / (1 / self._sample_rate)
+        return euclidean_distance / (frames.shape[0] / self._sample_rate)
 
     def __euclidean_distance(self, frames: np.ndarray = np.array([])) -> float:
         """
