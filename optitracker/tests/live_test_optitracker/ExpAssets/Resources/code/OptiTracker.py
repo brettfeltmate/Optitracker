@@ -5,6 +5,7 @@ from scipy.signal import butter, lfilter, freqz, sosfiltfilt
 # TODO:
 #  - grab first frame, row count indicates num markers tracked.
 #  - incorporate checks to ensure frames queried match expected marker count
+#  - refactor nomeclature about frame indexing/querying
 
 
 class OptiTracker(object):

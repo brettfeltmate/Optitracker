@@ -1,9 +1,11 @@
 import os
 import numpy as np
+from scipy.signal import butter, lfilter, freqz, sosfiltfilt
 
 # TODO:
 #  - grab first frame, row count indicates num markers tracked.
 #  - incorporate checks to ensure frames queried match expected marker count
+#  - refactor nomeclature about frame indexing/querying
 
 
 class OptiTracker(object):
@@ -159,6 +161,45 @@ class OptiTracker(object):
             )
         )
 
+    # TODO: reduce dependencies by hand-rolling a butterworth filter
+    # TODO: but first make sure this isn't a bad idea.
+
+    def __smooth(self, order=2, cutoff=10, filtype="low", frames: np.ndarray = np.array([])) -> np.ndarray:
+        """
+        Apply a dual-pass Butterworth filter to positional data.
+
+        Args:
+            order (int, optional): Order of the Butterworth filter. Defaults to 2.
+            cutoff (int, optional): Cutoff frequency in Hz. Defaults to 10.
+            filtype (str, optional): Type of filter to apply. Defaults to "low".
+            frames (np.ndarray, optional): Array of frame data; queries last window_size frames if empty.
+
+        Returns:
+            np.ndarray: Array of filtered positions
+        """
+        if len(frames) == 0:
+            frames = self.__query_frames()
+
+        # Create output array with the correct dtype
+        smooth = np.zeros(
+            len(frames),
+            dtype=[
+                ("frame_number", "i8"),
+                ("pos_x", "f8"),
+                ("pos_y", "f8"),
+                ("pos_z", "f8"),
+            ],
+        )
+
+
+        butt = butter(N=order, Wn=cutoff, btype=filtype, output="sos", fs=self._sample_rate)
+
+        smooth["pos_x"] = sosfiltfilt(sos=butt, x=frames["pos_x"], padlen=None)
+        smooth["pos_y"] = sosfiltfilt(sos=butt, x=frames["pos_y"], padlen=None)
+        smooth["pos_z"] = sosfiltfilt(sos=butt, x=frames["pos_z"], padlen=None)
+
+        return smooth
+
     def __column_means(self, frames: np.ndarray = np.array([])) -> np.ndarray:
         """
         Calculate column means of position data.
@@ -252,5 +293,7 @@ class OptiTracker(object):
 
         # Filter for relevant frames
         data = data[data["frame"] > lookback]
+
+        data = self.__smooth(frames=data)
 
         return data
