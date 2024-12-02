@@ -209,6 +209,10 @@ class OptiTracker(object):
 
         Returns:
             np.ndarray: Array of mean positions
+
+        Note:
+            Currently applies smoothing function to generate means.
+            This may (and should) be done on raw data within __query_frames instead.
         """
         if len(frames) == 0:
             frames = self.__query_frames()
