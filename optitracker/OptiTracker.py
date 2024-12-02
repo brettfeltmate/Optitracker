@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from scipy.signal import butter, lfilter, freqz, sosfiltfilt
+from scipy.signal import butter, sosfiltfilt
 
 # TODO:
 #  - grab first frame, row count indicates num markers tracked.
@@ -194,9 +194,9 @@ class OptiTracker(object):
 
         butt = butter(N=order, Wn=cutoff, btype=filtype, output="sos", fs=self._sample_rate)
 
-        smooth["pos_x"] = sosfiltfilt(sos=butt, x=frames["pos_x"], padlen=None)
-        smooth["pos_y"] = sosfiltfilt(sos=butt, x=frames["pos_y"], padlen=None)
-        smooth["pos_z"] = sosfiltfilt(sos=butt, x=frames["pos_z"], padlen=None)
+        smooth["pos_x"] = sosfiltfilt(sos=butt, x=frames["pos_x"])
+        smooth["pos_y"] = sosfiltfilt(sos=butt, x=frames["pos_y"])
+        smooth["pos_z"] = sosfiltfilt(sos=butt, x=frames["pos_z"])
 
         return smooth
 
@@ -225,12 +225,19 @@ class OptiTracker(object):
         )
 
         # Group by marker (every nth row where n is marker_count)
-        for frame in range(1, len(frames) // self.__marker_count + 1):
-            frame_data = frames[frame,]
+        idx = 0
+        start = min(frames["frame_number"])
+        stop = max(frames["frame_number"]) + 1
+        for frame_number in range(start, stop):
+            frame = frames[frames["frame_number"] == frame_number,]
 
-            means[frame - 1]["pos_x"] = np.mean(frame_data["pos_x"])
-            means[frame - 1]["pos_y"] = np.mean(frame_data["pos_y"])
-            means[frame - 1]["pos_z"] = np.mean(frame_data["pos_z"])
+            means[idx]["pos_x"] = np.mean(frame["pos_x"])
+            means[idx]["pos_y"] = np.mean(frame["pos_y"])
+            means[idx]["pos_z"] = np.mean(frame["pos_z"])
+
+            idx += 1
+
+        means = self.__smooth(frames=means)
 
         return means
 
@@ -261,9 +268,9 @@ class OptiTracker(object):
         with open(self._data_dir, "r") as file:
             header = file.readline().strip().split(",")
 
-        if any(col not in header for col in ["frame", "pos_x", "pos_y", "pos_z"]):
+        if any(col not in header for col in ["frame_number", "pos_x", "pos_y", "pos_z"]):
             raise ValueError(
-                "Data file must contain columns named frame, pos_x, pos_y, pos_z."
+                "Data file must contain columns named frame_number, pos_x, pos_y, pos_z."
             )
 
         dtype_map = [
@@ -273,7 +280,7 @@ class OptiTracker(object):
                 (
                     "float"
                     if name in ["pos_x", "pos_y", "pos_z"]
-                    else "int" if name == "frame" else "U32"
+                    else "int" if name == "frame_number" else "U32"
                 ),
             )
             for name in header
@@ -288,12 +295,10 @@ class OptiTracker(object):
             num_frames = self._window_size
 
         # Calculate which frames to include
-        last_frame = data["frame"][-1]
+        last_frame = data["frame_number"][-1]
         lookback = last_frame - num_frames
 
         # Filter for relevant frames
-        data = data[data["frame"] > lookback]
-
-        data = self.__smooth(frames=data)
+        data = data[data["frame_number"] > lookback]
 
         return data

@@ -9,7 +9,7 @@ def sample_data_file(tmp_path):
 
     data_content = dedent(
         """
-        frame,pos_x,pos_y,pos_z
+        frame_number,pos_x,pos_y,pos_z
         1,0.0,0.0,0.0
         1,1.0,1.0,1.0
         1,2.0,2.0,2.0
@@ -90,7 +90,7 @@ def test_nonexistent_data_dir():
 def test_position(tracker):
     position = tracker.position()
     assert isinstance(position, np.ndarray)
-    assert position.dtype.names == ("frame", "pos_x", "pos_y", "pos_z")
+    assert position.dtype.names == ("frame_number", "pos_x", "pos_y", "pos_z")
     assert position["pos_x"].item() == 10.0
     assert position["pos_y"].item() == 10.0
     assert position["pos_z"].item() == 10.0
