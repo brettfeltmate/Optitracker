@@ -278,7 +278,7 @@ class OptiTracker(object):
             )
 
         dtype_map = [
-            # coerce expected columns to float | int, default to string otherwise
+            # coerce expected columns to float, int, string (default)
             (
                 name,
                 (
