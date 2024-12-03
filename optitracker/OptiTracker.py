@@ -3,9 +3,9 @@ import numpy as np
 from scipy.signal import butter, sosfiltfilt
 
 # TODO:
-#  - grab first frame, row count indicates num markers tracked.
-#  - incorporate checks to ensure frames queried match expected marker count
-#  - refactor nomeclature about frame indexing/querying
+# grab first frame, row count indicates num markers tracked.
+# incorporate checks to ensure frames queried match expected marker count
+# refactor nomeclature about frame indexing/querying
 
 
 class OptiTracker(object):
@@ -164,7 +164,9 @@ class OptiTracker(object):
     # TODO: reduce dependencies by hand-rolling a butterworth filter
     # TODO: but first make sure this isn't a bad idea.
 
-    def __smooth(self, order=2, cutoff=10, filtype="low", frames: np.ndarray = np.array([])) -> np.ndarray:
+    def __smooth(
+        self, order=2, cutoff=10, filtype="low", frames: np.ndarray = np.array([])
+    ) -> np.ndarray:
         """
         Apply a dual-pass Butterworth filter to positional data.
 
@@ -191,8 +193,9 @@ class OptiTracker(object):
             ],
         )
 
-
-        butt = butter(N=order, Wn=cutoff, btype=filtype, output="sos", fs=self._sample_rate)
+        butt = butter(
+            N=order, Wn=cutoff, btype=filtype, output="sos", fs=self._sample_rate
+        )
 
         smooth["pos_x"] = sosfiltfilt(sos=butt, x=frames["pos_x"])
         smooth["pos_y"] = sosfiltfilt(sos=butt, x=frames["pos_y"])
@@ -272,7 +275,9 @@ class OptiTracker(object):
         with open(self._data_dir, "r") as file:
             header = file.readline().strip().split(",")
 
-        if any(col not in header for col in ["frame_number", "pos_x", "pos_y", "pos_z"]):
+        if any(
+            col not in header for col in ["frame_number", "pos_x", "pos_y", "pos_z"]
+        ):
             raise ValueError(
                 "Data file must contain columns named frame_number, pos_x, pos_y, pos_z."
             )

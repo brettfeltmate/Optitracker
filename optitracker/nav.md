@@ -9,7 +9,7 @@ OptiTracker
 [[OptiTracker.py:235]]
 - Instead, this should be done before return, by:
 
-[[OptiTracker.py:249]]
+[[OptiTracker.py:253]]
 
 - But, how to properly index sub-elements (markers)? I.e.,
 
@@ -17,4 +17,4 @@ OptiTracker
 
 - Logic likely will be similar to how individual frames are handled here:
 
-[[OptiTracker.py:236]]
+[[OptiTracker.py:238]]
