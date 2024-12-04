@@ -3,6 +3,7 @@ import numpy as np
 import sqlite3
 from scipy.signal import butter, sosfiltfilt
 import klibs
+import warnings
 from klibs.KLDatabase import KLDatabase as kld
 
 # TODO:
@@ -265,15 +266,22 @@ class OptiTracker(object):
         start = min(frames["frame_number"])
         stop = max(frames["frame_number"]) + 1
 
-        print("Start: {}, Stop: {}".format(start, stop-1))
         for frame_number in range(start, stop):
+
+            warnings.filterwarnings('error')
             frame = frames[frames["frame_number"] == frame_number,]
 
-            means[idx]["pos_x"] = np.mean(frame["pos_x"])
-            means[idx]["pos_y"] = np.mean(frame["pos_y"])
-            means[idx]["pos_z"] = np.mean(frame["pos_z"])
+            try:
 
-            idx += 1
+                means[idx]["pos_x"] = np.mean(frame["pos_x"])
+                means[idx]["pos_y"] = np.mean(frame["pos_y"])
+                means[idx]["pos_z"] = np.mean(frame["pos_z"])
+
+                idx += 1
+
+            except RuntimeWarning as e:
+                print("Frame {} has problems".format(frame_number))
+                print(frame)
 
         means = self.__smooth(frames=means)
 
