@@ -264,6 +264,8 @@ class OptiTracker(object):
         idx = 0
         start = min(frames["frame_number"])
         stop = max(frames["frame_number"]) + 1
+
+        print("Start: {}, Stop: {}".format(start, stop))
         for frame_number in range(start, stop):
             frame = frames[frames["frame_number"] == frame_number,]
 
