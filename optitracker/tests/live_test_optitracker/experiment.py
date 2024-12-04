@@ -14,6 +14,8 @@ from klibs.KLUserInterface import ui_request, any_key, smart_sleep
 from klibs.KLUtilities import pump
 from klibs.KLBoundary import BoundaryInspector, CircleBoundary
 
+from klibs.KLTime import CountDown
+
 # local modules
 from natnetclient_rough import NatNetClient  # type: ignore[import]
 from OptiTracker import OptiTracker  # type: ignore[import]
@@ -101,7 +103,8 @@ class live_test_optitracker(klibs.Experiment):
 
     def trial(self):  # type: ignore
 
-        while True:
+        counter = CountDown(5)
+        while counter.counting():
             q = pump()
             _ = ui_request(queue=q)
 
@@ -144,7 +147,7 @@ class live_test_optitracker(klibs.Experiment):
 
             flip()
 
-        # return {"block_num": P.block_number, "trial_num": P.trial_number}
+        return {"block_num": P.block_number, "trial_num": P.trial_number}
 
     def trial_clean_up(self):
         pass
