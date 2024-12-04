@@ -1,6 +1,9 @@
 import os
 import numpy as np
+import sqlite3
 from scipy.signal import butter, sosfiltfilt
+import klibs
+from klibs.KLDatabase import KLDatabase as kld
 
 # TODO:
 # grab first frame, row count indicates num markers tracked.
@@ -34,6 +37,7 @@ class OptiTracker(object):
         sample_rate: int = 120,
         window_size: int = 5,
         data_dir: str = "",
+        db_name: str = "optitracker.db",
     ):
         """
         Initialize the OptiTracker object.
@@ -48,9 +52,34 @@ class OptiTracker(object):
         if marker_count:
             self.__marker_count = marker_count
 
-        self._sample_rate = sample_rate
-        self._data_dir = data_dir
-        self._window_size = window_size
+        self.__sample_rate = sample_rate
+        self.__data_dir = data_dir
+        self.__window_size = window_size
+        self.db = self.__connect(db_name)
+
+        self.cursor = self.db.cursor()
+
+        db_scheme = '''
+        CREATE TABLE IF NOT EXISTS frames (
+            frame_number INTEGER PRIMARY KEY,
+            pos_x REAL,
+            pos_y REAL,
+            pos_z REAL
+        )
+        '''
+
+        self.cursor.execute(db_scheme)
+
+
+    # @property
+    # def database(self) -> str:
+    #     """Get the name of the database file."""
+    #     return self.__database
+    #
+    # @database.setter
+    # def database(self, database: str) -> None:
+    #     """Set the name of the database file."""
+    #     self.__database = database
 
     @property
     def marker_count(self) -> int:
@@ -65,37 +94,37 @@ class OptiTracker(object):
     @property
     def data_dir(self) -> str:
         """Get the data directory path."""
-        return self._data_dir
+        return self.__data_dir
 
     @data_dir.setter
     def data_dir(self, data_dir: str) -> None:
         """Set the data directory path."""
-        self._data_dir = data_dir
+        self.__data_dir = data_dir
 
     @property
     def sample_rate(self) -> int:
         """Get the sampling rate."""
-        return self._sample_rate
+        return self.__sample_rate
 
     @sample_rate.setter
     def sample_rate(self, sample_rate: int) -> None:
         """Set the sampling rate."""
-        self._sample_rate = sample_rate
+        self.__sample_rate = sample_rate
 
     @property
     def window_size(self) -> int:
         """Get the window size."""
-        return self._window_size
+        return self.__window_size
 
     @window_size.setter
     def window_size(self, window_size: int) -> None:
         """Set the window size."""
-        self._window_size = window_size
+        self.__window_size = window_size
 
     def velocity(self, num_frames: int = 0) -> float:
         """Calculate and return the current velocity."""
         if num_frames == 0:
-            num_frames = self._window_size
+            num_frames = self.__window_size
 
         if num_frames < 2:
             raise ValueError("Window size must cover at least two frames.")
@@ -112,7 +141,7 @@ class OptiTracker(object):
         """Calculate and return the distance traveled over the specified number of frames."""
 
         if num_frames == 0:
-            num_frames = self._window_size
+            num_frames = self.__window_size
 
         frames = self.__query_frames(num_frames)
         return self.__euclidean_distance(frames)
@@ -127,7 +156,7 @@ class OptiTracker(object):
         Returns:
             float: Calculated velocity in cm/s
         """
-        if self._window_size < 2:
+        if self.__window_size < 2:
             raise ValueError("Window size must cover at least two frames.")
 
         if len(frames) == 0:
@@ -135,7 +164,7 @@ class OptiTracker(object):
 
         euclidean_distance = self.__euclidean_distance(frames)
 
-        return euclidean_distance / (frames.shape[0] / self._sample_rate)
+        return euclidean_distance / (frames.shape[0] / self.__sample_rate)
 
     def __euclidean_distance(self, frames: np.ndarray = np.array([])) -> float:
         """
@@ -194,7 +223,7 @@ class OptiTracker(object):
         )
 
         butt = butter(
-            N=order, Wn=cutoff, btype=filtype, output="sos", fs=self._sample_rate
+            N=order, Wn=cutoff, btype=filtype, output="sos", fs=self.__sample_rate
         )
 
         smooth["pos_x"] = sosfiltfilt(sos=butt, x=frames["pos_x"])
@@ -263,16 +292,16 @@ class OptiTracker(object):
             FileNotFoundError: If data directory does not exist
         """
 
-        if self._data_dir == "":
+        if self.__data_dir == "":
             raise ValueError("No data directory was set.")
 
-        if not os.path.exists(self._data_dir):
-            raise FileNotFoundError(f"Data directory not found at:\n{self._data_dir}")
+        if not os.path.exists(self.__data_dir):
+            raise FileNotFoundError(f"Data directory not found at:\n{self.__data_dir}")
 
         if num_frames < 0:
             raise ValueError("Number of frames cannot be negative.")
 
-        with open(self._data_dir, "r") as file:
+        with open(self.__data_dir, "r") as file:
             header = file.readline().strip().split(",")
 
         if any(
@@ -297,11 +326,11 @@ class OptiTracker(object):
 
         # read in data now that columns have been validated and typed
         data = np.genfromtxt(
-            self._data_dir, delimiter=",", dtype=dtype_map, skip_header=1
+            self.__data_dir, delimiter=",", dtype=dtype_map, skip_header=1
         )
 
         if num_frames == 0:
-            num_frames = self._window_size
+            num_frames = self.__window_size
 
         # Calculate which frames to include
         last_frame = data["frame_number"][-1]
@@ -311,3 +340,12 @@ class OptiTracker(object):
         data = data[data["frame_number"] > lookback]
 
         return data
+    
+    def __connect(self, db_name: str = "optitracker.db") -> sqlite3.Connection:
+        """
+        Connect to the SQLite database.
+
+        Returns:
+            sqlite3.Connection: Connection object
+        """
+        return sqlite3.connect(db_name)
