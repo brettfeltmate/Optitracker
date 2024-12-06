@@ -160,12 +160,14 @@ class live_test_optitracker(klibs.Experiment):
                 Expected format: {'markers': [{'key1': val1, ...}, ...]}
         """
         # print(marker_set["markers"][0].keys())
-        if not os.path.exists(self.data_file):
+
+        if marker_set["label"] == "stick":
+            if not os.path.exists(self.data_file):
+                with open(self.data_file, "a", newline="") as file:
+                    writer = DictWriter(file, fieldnames=marker_set["markers"][0].keys())
+                    writer.writeheader()
+
             with open(self.data_file, "a", newline="") as file:
                 writer = DictWriter(file, fieldnames=marker_set["markers"][0].keys())
-                writer.writeheader()
-
-        with open(self.data_file, "a", newline="") as file:
-            writer = DictWriter(file, fieldnames=marker_set["markers"][0].keys())
-            for marker in marker_set.get("markers", None):
-                writer.writerow(marker)
+                for marker in marker_set.get("markers", None):
+                    writer.writerow(marker)

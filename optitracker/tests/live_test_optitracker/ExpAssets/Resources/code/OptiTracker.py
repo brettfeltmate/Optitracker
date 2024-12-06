@@ -4,6 +4,7 @@ import sqlite3
 from scipy.signal import butter, sosfiltfilt
 import klibs
 import warnings
+from pprint import pprint
 # from klibs.KLDatabase import KLDatabase as kld
 
 # TODO:
@@ -165,7 +166,7 @@ class OptiTracker(object):
 
         euclidean_distance = self.__euclidean_distance(frames)
 
-        return euclidean_distance / (frames.shape[0] / self.__sample_rate)
+        return euclidean_distance / (self.__window_size / self.__sample_rate)
 
     def __euclidean_distance(self, frames: np.ndarray = np.array([])) -> float:
         """
@@ -182,6 +183,12 @@ class OptiTracker(object):
             frames = self.__query_frames()
 
         positions = self.__column_means(smooth = True, frames = frames)
+
+        # print("[__euclidean_distance()]")
+        # print("Frames queried:")
+        # pprint(frames)
+        # print("Calculated postion:")
+        # pprint(positions)
 
         return float(
             np.sqrt(
@@ -227,6 +234,10 @@ class OptiTracker(object):
             N=order, Wn=cutoff, btype=filtype, output="sos", fs=self.__sample_rate
         )
 
+        # print("[__smooth()]")
+        # print("frames:")
+        # pprint(frames)
+
         smooth["pos_x"] = sosfiltfilt(sos=butt, x=frames["pos_x"])
         smooth["pos_y"] = sosfiltfilt(sos=butt, x=frames["pos_y"])
         smooth["pos_z"] = sosfiltfilt(sos=butt, x=frames["pos_z"])
@@ -267,22 +278,29 @@ class OptiTracker(object):
         stop = max(frames["frame_number"]) + 1
 
         for frame_number in range(start, stop):
-
-            warnings.filterwarnings('error')
             frame = frames[frames["frame_number"] == frame_number,]
 
-            try:
+            yes_frame = True
 
-                means[idx]["pos_x"] = np.mean(frame["pos_x"])
-                means[idx]["pos_y"] = np.mean(frame["pos_y"])
-                means[idx]["pos_z"] = np.mean(frame["pos_z"])
+            if not len(frame):
+                yes_frame = False
+                tmp = frame_number - 1
+                while not len(frame) and tmp >= start:
+                    frame = frames[frames["frame_number"] == tmp,]
+                    tmp -= 1
 
+            means[idx]["pos_x"] = np.mean(frame["pos_x"])
+            means[idx]["pos_y"] = np.mean(frame["pos_y"])
+            means[idx]["pos_z"] = np.mean(frame["pos_z"])
+
+            if yes_frame:
                 idx += 1
 
-            except RuntimeWarning as e:
-                means[idx]["pos_x"] = 0.0
-                means[idx]["pos_y"] = 0.0
-                means[idx]["pos_z"] = 0.0
+
+            # except RuntimeWarning as e:
+            #     means[idx]["pos_x"] = 0.0
+            #     means[idx]["pos_y"] = 0.0
+            #     means[idx]["pos_z"] = 0.0
 
         if smooth:
             means = self.__smooth(frames=means)
