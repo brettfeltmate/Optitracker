@@ -103,7 +103,7 @@ class live_test_optitracker(klibs.Experiment):
 
     def trial(self):  # type: ignore
 
-        counter = CountDown(5)
+        counter = CountDown(60)
         while counter.counting():
             q = pump()
             _ = ui_request(queue=q)
@@ -114,8 +114,9 @@ class live_test_optitracker(klibs.Experiment):
                 blit(self.placeholders[key], location=self.locs[key], registration=5)
 
             cursor_pos = self.ot.position()
+            # print("Cursor pos: {}".format(cursor_pos))
 
-            pos = [cursor_pos["pos_x"][0], cursor_pos["pos_z"][0]]
+            pos = [int(cursor_pos["pos_x"][0]), int(cursor_pos["pos_z"][0])]
 
             cursor_vel = self.ot.velocity()
 
