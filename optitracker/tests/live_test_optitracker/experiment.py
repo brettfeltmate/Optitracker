@@ -114,14 +114,10 @@ class live_test_optitracker(klibs.Experiment):
                 blit(self.placeholders[key], location=self.locs[key], registration=5)
 
             cursor_pos = self.ot.position()
-            cursor_pos["pos_x"] = cursor_pos["pos_x"] * 1000
-            cursor_pos["pos_y"] = cursor_pos["pos_y"] * 1000
-            cursor_pos["pos_z"] = cursor_pos["pos_z"] * 1000
 
             pos = [cursor_pos["pos_x"][0], cursor_pos["pos_z"][0]]
-            pos = [int(p * self.px_mm) for p in pos]
 
-            cursor_vel = self.ot.velocity() * 100
+            cursor_vel = self.ot.velocity()
 
             which_bound = self.bi.which_boundary(pos)
 

@@ -2,9 +2,11 @@ import os
 import numpy as np
 import sqlite3
 from scipy.signal import butter, sosfiltfilt
-import klibs
+
+# import klibs
 import warnings
-from klibs.KLDatabase import KLDatabase as kld
+
+# from klibs.KLDatabase import KLDatabase as kld
 
 # TODO:
 # grab first frame, row count indicates num markers tracked.
@@ -38,6 +40,7 @@ class OptiTracker(object):
         sample_rate: int = 120,
         window_size: int = 5,
         data_dir: str = "",
+        # coerce_to_int: bool = True,
         db_name: str = "optitracker.db",
     ):
         """
@@ -60,17 +63,16 @@ class OptiTracker(object):
 
         self.cursor = self.db.cursor()
 
-        db_scheme = '''
+        db_scheme = """
         CREATE TABLE IF NOT EXISTS frames (
             frame_number INTEGER PRIMARY KEY,
             pos_x REAL,
             pos_y REAL,
             pos_z REAL
         )
-        '''
+        """
 
         self.cursor.execute(db_scheme)
-
 
     # @property
     # def database(self) -> str:
@@ -217,9 +219,9 @@ class OptiTracker(object):
             len(frames),
             dtype=[
                 ("frame_number", "i8"),
-                ("pos_x", "f8"),
-                ("pos_y", "f8"),
-                ("pos_z", "f8"),
+                ("pos_x", "i8"),
+                ("pos_y", "i8"),
+                ("pos_z", "i8"),
             ],
         )
 
@@ -255,9 +257,9 @@ class OptiTracker(object):
             len(frames) // self.__marker_count,
             dtype=[
                 ("frame", "i8"),
-                ("pos_x", "f8"),
-                ("pos_y", "f8"),
-                ("pos_z", "f8"),
+                ("pos_x", "i8"),
+                ("pos_y", "i8"),
+                ("pos_z", "i8"),
             ],
         )
 
@@ -268,7 +270,7 @@ class OptiTracker(object):
 
         for frame_number in range(start, stop):
 
-            warnings.filterwarnings('error')
+            warnings.filterwarnings("error")
             frame = frames[frames["frame_number"] == frame_number,]
 
             try:
@@ -279,7 +281,7 @@ class OptiTracker(object):
 
                 idx += 1
 
-            except RuntimeWarning as e:
+            except RuntimeWarning:
                 print("Frame {} has problems".format(frame_number))
                 print(frame)
 
@@ -326,18 +328,28 @@ class OptiTracker(object):
             (
                 name,
                 (
-                    "float"
-                    if name in ["pos_x", "pos_y", "pos_z"]
-                    else "int" if name == "frame_number" else "U32"
+                    "int"
+                    if name in ["pos_x", "pos_y", "pos_z", "frame_number"]
+                    else "U32"
                 ),
             )
             for name in header
         ]
 
+        # converter = {
+        #     "pos_x": lambda x: int(float(x) * 1000),
+        #     "pos_y": lambda x: int(float(x) * 1000),
+        #     "pos_z": lambda x: int(float(x) * 1000),
+        # }
+
+
         # read in data now that columns have been validated and typed
         data = np.genfromtxt(
             self.__data_dir, delimiter=",", dtype=dtype_map, skip_header=1
         )
+
+        for col in ['pos_x', 'pos_y', 'pos_z']:
+            data[col] = np.rint(data[col] * 1000).astype(np.int32)
 
         if num_frames == 0:
             num_frames = self.__window_size
@@ -350,7 +362,7 @@ class OptiTracker(object):
         data = data[data["frame_number"] > lookback]
 
         return data
-    
+
     def __connect(self, db_name: str = "optitracker.db") -> sqlite3.Connection:
         """
         Connect to the SQLite database.
