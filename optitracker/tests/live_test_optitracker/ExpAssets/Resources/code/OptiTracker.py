@@ -280,22 +280,18 @@ class OptiTracker(object):
         for frame_number in range(start, stop):
             frame = frames[frames["frame_number"] == frame_number,]
 
-            yes_frame = True
-
             if not len(frame):
-                yes_frame = False
                 tmp = frame_number - 1
                 while not len(frame) and tmp >= start:
                     frame = frames[frames["frame_number"] == tmp,]
                     tmp -= 1
 
+
             means[idx]["pos_x"] = np.mean(frame["pos_x"])
             means[idx]["pos_y"] = np.mean(frame["pos_y"])
             means[idx]["pos_z"] = np.mean(frame["pos_z"])
 
-            if yes_frame:
-                idx += 1
-
+            idx += 1
 
             # except RuntimeWarning as e:
             #     means[idx]["pos_x"] = 0.0
