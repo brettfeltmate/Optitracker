@@ -138,7 +138,7 @@ class OptiTracker(object):
     def position(self) -> np.ndarray:
         """Get the current position of markers."""
         frame = self.__query_frames(num_frames=1)
-        return self.__column_means(frame)
+        return self.__column_means(smooth = False, frames = frame)
 
     def distance(self, num_frames: int = 0) -> float:
         """Calculate and return the distance traveled over the specified number of frames."""
@@ -183,7 +183,7 @@ class OptiTracker(object):
         if frames.size == 0:
             frames = self.__query_frames()
 
-        positions = self.__column_means(frames)
+        positions = self.__column_means(smooth = True, frames = frames)
 
         return float(
             np.sqrt(
@@ -235,7 +235,7 @@ class OptiTracker(object):
 
         return smooth
 
-    def __column_means(self, frames: np.ndarray = np.array([])) -> np.ndarray:
+    def __column_means(self, smooth:bool = True, frames: np.ndarray = np.array([])) -> np.ndarray:
         """
         Calculate column means of position data.
 
@@ -281,11 +281,13 @@ class OptiTracker(object):
 
                 idx += 1
 
-            except RuntimeWarning:
-                print("Frame {} has problems".format(frame_number))
-                print(frame)
+            except RuntimeWarning as e:
+                means[idx]["pos_x"] = 0.0
+                means[idx]["pos_y"] = 0.0
+                means[idx]["pos_z"] = 0.0
 
-        means = self.__smooth(frames=means)
+        if smooth:
+            means = self.__smooth(frames=means)
 
         return means
 
@@ -328,20 +330,13 @@ class OptiTracker(object):
             (
                 name,
                 (
-                    "int"
-                    if name in ["pos_x", "pos_y", "pos_z", "frame_number"]
-                    else "U32"
+                    "float"
+                    if name in ["pos_x", "pos_y", "pos_z"]
+                    else "int" if name == "frame_number" else "U32"
                 ),
             )
             for name in header
         ]
-
-        # converter = {
-        #     "pos_x": lambda x: int(float(x) * 1000),
-        #     "pos_y": lambda x: int(float(x) * 1000),
-        #     "pos_z": lambda x: int(float(x) * 1000),
-        # }
-
 
         # read in data now that columns have been validated and typed
         data = np.genfromtxt(

@@ -217,9 +217,9 @@ class OptiTracker(object):
             len(frames),
             dtype=[
                 ("frame_number", "i8"),
-                ("pos_x", "f8"),
-                ("pos_y", "f8"),
-                ("pos_z", "f8"),
+                ("pos_x", "i8"),
+                ("pos_y", "i8"),
+                ("pos_z", "i8"),
             ],
         )
 
@@ -255,9 +255,9 @@ class OptiTracker(object):
             len(frames) // self.__marker_count,
             dtype=[
                 ("frame", "i8"),
-                ("pos_x", "f8"),
-                ("pos_y", "f8"),
-                ("pos_z", "f8"),
+                ("pos_x", "i8"),
+                ("pos_y", "i8"),
+                ("pos_z", "i8"),
             ],
         )
 
@@ -288,11 +288,6 @@ class OptiTracker(object):
             means = self.__smooth(frames=means)
 
         return means
-
-    def __round(self, frames: np.ndarray = np.array([])) -> np.ndarray:
-        # TODO: convert values to int, will require updating dtype elsewhere
-        pass
-
 
     def __query_frames(self, num_frames: int = 0) -> np.ndarray:
         """
@@ -345,6 +340,9 @@ class OptiTracker(object):
         data = np.genfromtxt(
             self.__data_dir, delimiter=",", dtype=dtype_map, skip_header=1
         )
+
+        for col in ['pos_x', 'pos_y', 'pos_z']:
+            data[col] = np.rint(data[col] * 1000).astype(np.int32)
 
         if num_frames == 0:
             num_frames = self.__window_size
