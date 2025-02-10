@@ -3,7 +3,7 @@ import numpy as np
 import sqlite3
 from scipy.signal import butter, sosfiltfilt
 
-import warnings
+# import warnings
 
 # from klibs.KLDatabase import KLDatabase as kld
 
@@ -39,7 +39,7 @@ class OptiTracker(object):
         sample_rate: int = 120,
         window_size: int = 5,
         data_dir: str = "",
-        # rescale_by: int = 1000,
+        rescale_by: int | float = 1000,
         # coerce_to_int: bool = True,
         db_name: str = "optitracker.db",
     ):
@@ -59,7 +59,7 @@ class OptiTracker(object):
         self.__sample_rate = sample_rate
         self.__data_dir = data_dir
         self.__window_size = window_size
-        # self.__rescale_by = rescale_by
+        self.__rescale_by = rescale_by
         self.db = self.__connect(db_name)
 
         self.cursor = self.db.cursor()
@@ -115,29 +115,29 @@ class OptiTracker(object):
         """Set the sampling rate."""
         self.__sample_rate = sample_rate
 
-    # @property
-    # def rescale_by(self) -> int:
-    #     """Get the rescaling factor used to convert position data.
-    #
-    #     This factor is multiplied with all position values after reading from file.
-    #     For example, use 1000 to convert meters to millimeters.
-    #     """
-    #     return self.__rescale_by
+    @property
+    def rescale_by(self) -> int | float:
+        """Get the rescaling factor used to convert position data.
 
-    # @rescale_by.setter
-    # def rescale_by(self, rescale_by: int) -> None:
-    #
-    #     """Set the rescaling factor for position data.
-    #
-    #     Args:
-    #         rescale_by (int): Factor to multiply position values by (must be positive)
-    #
-    #     Raises:
-    #         ValueError: If rescale_by is not positive
-    #     """
-    #     if rescale_by <= 0:
-    #         raise ValueError("Rescale factor must be positive")
-        # self.__rescale_by = rescale_by
+        This factor is multiplied with all position values after reading from file.
+        For example, use 1000 to convert meters to millimeters.
+        """
+        return self.__rescale_by
+
+    @rescale_by.setter
+    def rescale_by(self, rescale_by: int | float) -> None:
+
+        """Set the rescaling factor for position data.
+
+        Args:
+            rescale_by (int): Factor to multiply position values by (must be positive)
+
+        Raises:
+            ValueError: If rescale_by is not positive
+        """
+        if rescale_by <= 0.0:
+            raise ValueError("Rescale factor must be positive")
+        self.__rescale_by = rescale_by
 
     @property
     def window_size(self) -> int:
@@ -375,12 +375,12 @@ class OptiTracker(object):
         )
 
         # Rescale position data (e.g., convert meters to millimeters)
-        # if self.__rescale_by <= 0:
-        #     raise ValueError("Rescale factor must be positive")
+        if self.__rescale_by <= 0.0:
+            raise ValueError("Rescale factor must be positive")
             
         # TODO: make this a param
         for col in ['pos_x', 'pos_y', 'pos_z']:
-            data[col][:] = data[col][:] * 1000.0
+            data[col][:] = data[col][:] * self.__rescale_by
 
         if num_frames == 0:
             num_frames = self.__window_size
