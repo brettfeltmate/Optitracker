@@ -14,23 +14,23 @@ from scipy.signal import butter, sosfiltfilt
 
 
 class OptiTracker(object):
-    """
-    A class for querying and operating on motion tracking data.
+    """A class for processing and analyzing 3D motion tracking data.
 
-    This class processes positional data from markers, providing functionality
-    to calculate velocities and positions in 3D space. It handles data loading,
-    frame querying, and various spatial calculations.
+    This class handles loading, processing, and analyzing positional data from motion
+    tracking markers. It provides functionality for calculating velocities, positions,
+    and distances in 3D space, with optional smoothing using Butterworth filtering.
 
     Attributes:
-        marker_count (int): Number of markers to track
-        sample_rate (int): Sampling rate of the tracking system in Hz
-        window_size (int): Number of frames to consider for calculations
-        data_dir (str): Directory path containing the tracking data files
+        marker_count (int): Number of markers being tracked
+        sample_rate (int): Data sampling rate in Hz
+        window_size (int): Size of the temporal window for calculations (in frames)
+        data_dir (str): Path to the data file containing tracking data
+        rescale_by (float): Factor to rescale position data (e.g., 1000 for m to mm)
+        db (sqlite3.Connection): Database connection for storing processed data
 
-    Methods:
-        velocity(num_frames): Calculate velocity based on marker positions across specified number of frames
-        position(): Get current position of markers
-        distance(num_frames: int): Calculate distance traveled over specified number of frames
+    Note:
+        The data file should be a CSV with columns: frame_number, pos_x, pos_y, pos_z
+        Position data is automatically rescaled by multiplying with rescale_by factor
     """
 
     def __init__(
@@ -43,14 +43,19 @@ class OptiTracker(object):
         # coerce_to_int: bool = True,
         db_name: str = "optitracker.db",
     ):
-        """
-        Initialize the OptiTracker object.
+        """Initialize the OptiTracker object.
 
         Args:
-            marker_count (int): Number of markers to track
-            sample_rate (int, optional): Sampling rate in Hz. Defaults to 120.
-            window_size (int, optional): Number of frames for calculations. Defaults to 5.
-            data_dir (str, optional): Path to data directory. Defaults to empty string.
+            marker_count (int): Number of markers being tracked
+            sample_rate (int, optional): Data sampling rate in Hz. Defaults to 120.
+            window_size (int, optional): Number of frames for temporal calculations. Defaults to 5.
+            data_dir (str, optional): Path to the tracking data file. Defaults to "".
+            rescale_by (float, optional): Factor to rescale position values. Defaults to 1000.
+            db_name (str, optional): Name of SQLite database file. Defaults to "optitracker.db".
+
+        Raises:
+            ValueError: If marker_count is not positive
+            sqlite3.Error: If database connection fails
         """
 
         if marker_count:
@@ -150,7 +155,21 @@ class OptiTracker(object):
         self.__window_size = window_size
 
     def velocity(self, num_frames: int = 0) -> float:
-        """Calculate and return the current velocity."""
+        """Calculate the current velocity from position data.
+
+        Computes velocity by measuring displacement over time using the specified
+        number of frames or the default window size.
+
+        Args:
+            num_frames (int, optional): Number of frames to use for calculation.
+                If 0, uses the instance's window_size. Defaults to 0.
+
+        Returns:
+            float: Calculated velocity in units/second (based on rescale_by factor)
+
+        Raises:
+            ValueError: If num_frames is less than 2
+        """
         if num_frames == 0:
             num_frames = self.__window_size
 
@@ -161,12 +180,31 @@ class OptiTracker(object):
         return self.__velocity(frames)
 
     def position(self) -> np.ndarray:
-        """Get the current position of markers."""
+        """Get the current mean position across all markers.
+
+        Returns:
+            np.ndarray: Structured array containing the mean position with fields:
+                - frame_number (int): Frame identifier
+                - pos_x (float): X coordinate
+                - pos_y (float): Y coordinate
+                - pos_z (float): Z coordinate
+        """
         frame = self.__query_frames(num_frames=1)
         return self.__column_means(smooth = False, frames = frame)
 
     def distance(self, num_frames: int = 0) -> float:
-        """Calculate and return the distance traveled over the specified number of frames."""
+        """Calculate the Euclidean distance traveled over specified frames.
+
+        Args:
+            num_frames (int, optional): Number of frames to calculate distance over.
+                If 0, uses the instance's window_size. Defaults to 0.
+
+        Returns:
+            float: Euclidean distance between start and end positions
+
+        Note:
+            Distance is calculated using smoothed position data if smoothing is enabled
+        """
 
         if num_frames == 0:
             num_frames = self.__window_size
@@ -224,17 +262,27 @@ class OptiTracker(object):
     def __smooth(
         self, order=2, cutoff=10, filtype="low", frames: np.ndarray = np.array([])
     ) -> np.ndarray:
-        """
-        Apply a dual-pass Butterworth filter to positional data.
+        """Apply a zero-phase Butterworth filter to position data.
+
+        Uses scipy.signal.sosfiltfilt for zero-phase digital filtering, which
+        processes the input data forwards and backwards to eliminate phase delay.
 
         Args:
             order (int, optional): Order of the Butterworth filter. Defaults to 2.
             cutoff (int, optional): Cutoff frequency in Hz. Defaults to 10.
-            filtype (str, optional): Type of filter to apply. Defaults to "low".
-            frames (np.ndarray, optional): Array of frame data; queries last window_size frames if empty.
+            filtype (str, optional): Filter type ('low', 'high', 'band'). Defaults to "low".
+            frames (np.ndarray, optional): Structured array of frame data.
+                If empty, queries last window_size frames. Defaults to empty array.
 
         Returns:
-            np.ndarray: Array of filtered positions
+            np.ndarray: Structured array of filtered positions with fields:
+                - frame_number (int): Frame identifier
+                - pos_x (float): Filtered X coordinate
+                - pos_y (float): Filtered Y coordinate
+                - pos_z (float): Filtered Z coordinate
+
+        Note:
+            The filter is applied separately to each position dimension
         """
         if len(frames) == 0:
             frames = self.__query_frames()
@@ -262,18 +310,26 @@ class OptiTracker(object):
         return smooth
 
     def __column_means(self, smooth:bool = True, frames: np.ndarray = np.array([])) -> np.ndarray:
-        """
-        Calculate column means of position data.
+        """Calculate mean positions across all markers for each frame.
+
+        For each frame, computes the centroid position by averaging the positions
+        of all markers tracked in that frame.
 
         Args:
-            frames (np.ndarray, optional): Array of frame data; queries last window_size frames if empty.
+            smooth (bool, optional): Whether to apply Butterworth filtering to means.
+                Defaults to True.
+            frames (np.ndarray, optional): Structured array of frame data.
+                If empty, queries last window_size frames. Defaults to empty array.
 
         Returns:
-            np.ndarray: Array of mean positions
+            np.ndarray: Structured array of mean positions with fields:
+                - frame (int): Frame identifier
+                - pos_x (float): Mean X coordinate
+                - pos_y (float): Mean Y coordinate
+                - pos_z (float): Mean Z coordinate
 
         Note:
-            Currently applies smoothing function to generate means.
-            This may (and should) be done on raw data within __query_frames instead.
+            If smooth=True, means are filtered using the __smooth method
         """
         if len(frames) == 0:
             frames = self.__query_frames()
@@ -322,19 +378,32 @@ class OptiTracker(object):
 
         return means
 
+    # TODO: should default to None
     def __query_frames(self, num_frames: int = 0) -> np.ndarray:
-        """
-        Query and process frame data from the data file.
+        """Load and process frame data from the tracking data file.
+
+        Reads position data from CSV file, validates format, and applies rescaling.
+        Returns the most recent frames up to the specified number.
 
         Args:
-            num_frames (int, optional): Number of frames to query. Defaults to window_size when empty.
+            num_frames (int, optional): Number of most recent frames to return.
+                If 0, uses the instance's window_size. Defaults to 0.
 
         Returns:
-            np.ndarray: Array of queried frame data
+            np.ndarray: Structured array of frame data with fields:
+                - frame_number (int): Frame identifier
+                - pos_x (float): X coordinate (rescaled)
+                - pos_y (float): Y coordinate (rescaled)
+                - pos_z (float): Z coordinate (rescaled)
 
         Raises:
-            ValueError: If data directory is not set or data format is invalid
-            FileNotFoundError: If data directory does not exist
+            ValueError: If data_dir is empty or data format is invalid
+            FileNotFoundError: If data file does not exist
+            ValueError: If num_frames is negative
+            ValueError: If rescale_by is not positive
+
+        Note:
+            Position values are automatically multiplied by rescale_by factor
         """
 
         if self.__data_dir == "":
