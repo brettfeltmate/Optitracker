@@ -3,7 +3,6 @@ import numpy as np
 import sqlite3
 from scipy.signal import butter, sosfiltfilt
 
-# import klibs
 import warnings
 
 # from klibs.KLDatabase import KLDatabase as kld
@@ -40,6 +39,7 @@ class OptiTracker(object):
         sample_rate: int = 120,
         window_size: int = 5,
         data_dir: str = "",
+        # rescale_by: int = 1000,
         # coerce_to_int: bool = True,
         db_name: str = "optitracker.db",
     ):
@@ -59,6 +59,7 @@ class OptiTracker(object):
         self.__sample_rate = sample_rate
         self.__data_dir = data_dir
         self.__window_size = window_size
+        # self.__rescale_by = rescale_by
         self.db = self.__connect(db_name)
 
         self.cursor = self.db.cursor()
@@ -113,6 +114,30 @@ class OptiTracker(object):
     def sample_rate(self, sample_rate: int) -> None:
         """Set the sampling rate."""
         self.__sample_rate = sample_rate
+
+    # @property
+    # def rescale_by(self) -> int:
+    #     """Get the rescaling factor used to convert position data.
+    #
+    #     This factor is multiplied with all position values after reading from file.
+    #     For example, use 1000 to convert meters to millimeters.
+    #     """
+    #     return self.__rescale_by
+
+    # @rescale_by.setter
+    # def rescale_by(self, rescale_by: int) -> None:
+    #
+    #     """Set the rescaling factor for position data.
+    #
+    #     Args:
+    #         rescale_by (int): Factor to multiply position values by (must be positive)
+    #
+    #     Raises:
+    #         ValueError: If rescale_by is not positive
+    #     """
+    #     if rescale_by <= 0:
+    #         raise ValueError("Rescale factor must be positive")
+        # self.__rescale_by = rescale_by
 
     @property
     def window_size(self) -> int:
@@ -219,9 +244,9 @@ class OptiTracker(object):
             len(frames),
             dtype=[
                 ("frame_number", "i8"),
-                ("pos_x", "i8"),
-                ("pos_y", "i8"),
-                ("pos_z", "i8"),
+                ("pos_x", "f8"),
+                ("pos_y", "f8"),
+                ("pos_z", "f8"),
             ],
         )
 
@@ -229,9 +254,10 @@ class OptiTracker(object):
             N=order, Wn=cutoff, btype=filtype, output="sos", fs=self.__sample_rate
         )
 
-        smooth["pos_x"] = sosfiltfilt(sos=butt, x=frames["pos_x"])
-        smooth["pos_y"] = sosfiltfilt(sos=butt, x=frames["pos_y"])
-        smooth["pos_z"] = sosfiltfilt(sos=butt, x=frames["pos_z"])
+        smooth["frame_number"][:] = frames["frame_number"][:]
+        smooth["pos_x"][:] = sosfiltfilt(sos=butt, x=frames["pos_x"][:])
+        smooth["pos_y"][:] = sosfiltfilt(sos=butt, x=frames["pos_y"][:])
+        smooth["pos_z"][:] = sosfiltfilt(sos=butt, x=frames["pos_z"][:])
 
         return smooth
 
@@ -257,9 +283,9 @@ class OptiTracker(object):
             len(frames) // self.__marker_count,
             dtype=[
                 ("frame", "i8"),
-                ("pos_x", "i8"),
-                ("pos_y", "i8"),
-                ("pos_z", "i8"),
+                ("pos_x", "f8"),
+                ("pos_y", "f8"),
+                ("pos_z", "f8"),
             ],
         )
 
@@ -270,21 +296,26 @@ class OptiTracker(object):
 
         for frame_number in range(start, stop):
 
-            warnings.filterwarnings("error")
             frame = frames[frames["frame_number"] == frame_number,]
 
-            try:
+            means[idx]["pos_x"] = np.mean(frame["pos_x"])
+            means[idx]["pos_y"] = np.mean(frame["pos_y"])
+            means[idx]["pos_z"] = np.mean(frame["pos_z"])
 
-                means[idx]["pos_x"] = np.mean(frame["pos_x"])
-                means[idx]["pos_y"] = np.mean(frame["pos_y"])
-                means[idx]["pos_z"] = np.mean(frame["pos_z"])
+            idx += 1
 
-                idx += 1
-
-            except RuntimeWarning as e:
-                means[idx]["pos_x"] = 0.0
-                means[idx]["pos_y"] = 0.0
-                means[idx]["pos_z"] = 0.0
+            # try:
+            #
+            #     means[idx]["pos_x"] = np.mean(frame["pos_x"])
+            #     means[idx]["pos_y"] = np.mean(frame["pos_y"])
+            #     means[idx]["pos_z"] = np.mean(frame["pos_z"])
+            #
+            #     idx += 1
+            #
+            # except RuntimeWarning:
+            #     means[idx]["pos_x"] = 0.0
+            #     means[idx]["pos_y"] = 0.0
+            #     means[idx]["pos_z"] = 0.0
 
         if smooth:
             means = self.__smooth(frames=means)
@@ -330,9 +361,9 @@ class OptiTracker(object):
             (
                 name,
                 (
-                    "float"
+                    "f8"
                     if name in ["pos_x", "pos_y", "pos_z"]
-                    else "int" if name == "frame_number" else "U32"
+                    else "i8" if name == "frame_number" else "U32"
                 ),
             )
             for name in header
@@ -343,8 +374,13 @@ class OptiTracker(object):
             self.__data_dir, delimiter=",", dtype=dtype_map, skip_header=1
         )
 
+        # Rescale position data (e.g., convert meters to millimeters)
+        # if self.__rescale_by <= 0:
+        #     raise ValueError("Rescale factor must be positive")
+            
+        # TODO: make this a param
         for col in ['pos_x', 'pos_y', 'pos_z']:
-            data[col] = np.rint(data[col] * 1000).astype(np.int32)
+            data[col][:] = data[col][:] * 1000.0
 
         if num_frames == 0:
             num_frames = self.__window_size
