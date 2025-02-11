@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from csv import DictWriter
 from scipy.signal import butter, sosfiltfilt
 
 # import warnings
@@ -164,6 +165,16 @@ class Optitracker(object):
 
         frames = self.__query_frames(num_frames)
         return self.__euclidean_distance(frames=frames)
+
+    def write_frames(self, set_name: str, frames: dict) -> None:
+        """Write marker set data to a CSV file.
+
+        Args:
+            set_name (str): Name of the marker set to write
+            frames (dict): Dictionary containing marker data to be written.
+                Expected format: {'markers': [{'key1': val1, ...}, ...]}
+        """
+        self.__write_frames(set_name, frames)
 
     def __velocity(self, frames: np.ndarray = np.array([])) -> float:
         """
@@ -420,3 +431,28 @@ class Optitracker(object):
 
         return data
 
+    def __write_frames(self, set_name: str, frames: dict) -> None:
+        """Write marker set data to CSV file.
+
+        Args:
+            marker_set (dict): Dictionary containing marker data to be written.
+                Expected format: {'markers': [{'key1': val1, ...}, ...]}
+        """
+
+        if frames.get("label") == set_name:
+            # Append data to trial-specific CSV file
+            fname = self.__data_dir
+            header = list(frames["markers"][0].keys())
+
+            # if file doesn't exist, create it and write header
+            if not os.path.exists(fname):
+                with open(fname, "w", newline="") as file:
+                    writer = DictWriter(file, fieldnames=header)
+                    writer.writeheader()
+
+            # append marker data to file
+            with open(fname, "a", newline="") as file:
+                writer = DictWriter(file, fieldnames=header)
+                for marker in frames.get("markers", None):
+                    if marker is not None:
+                        writer.writerow(marker)
