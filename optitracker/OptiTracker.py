@@ -166,15 +166,38 @@ class Optitracker(object):
         frames = self.__query_frames(num_frames)
         return self.__euclidean_distance(frames=frames)
 
-    def write_frames(self, set_name: str, frames: dict) -> None:
-        """Write marker set data to a CSV file.
-
-        Args:
-            set_name (str): Name of the marker set to write
-            frames (dict): Dictionary containing marker data to be written.
-                Expected format: {'markers': [{'key1': val1, ...}, ...]}
+    @property
+    def write_frames(self):
+        """Get the current write_frames method.
+        
+        Returns:
+            Callable: Current method used for writing frames
         """
-        self.__write_frames(set_name, frames)
+        return self.__write_frames_method
+
+    @write_frames.setter
+    def write_frames(self, write_method: callable) -> None:  # type: ignore
+        """Set a custom method for writing frames.
+        
+        Args:
+            write_method (callable): Custom method that takes (set_name: str, frames: dict)
+        
+        Raises:
+            TypeError: If write_method is not callable
+        """
+        if not callable(write_method):
+            raise TypeError("write_frames must be set to a callable")
+        self.__write_frames_method = write_method
+
+    # def write_frames(self, set_name: str, frames: dict) -> None:
+    #     """Write marker set data to a CSV file.
+    #
+    #     Args:
+    #         set_name (str): Name of the marker set to write
+    #         frames (dict): Dictionary containing marker data to be written.
+    #             Expected format: {'markers': [{'key1': val1, ...}, ...]}
+    #     """
+    #     self.__write_frames(set_name, frames)
 
     def __velocity(self, frames: np.ndarray = np.array([])) -> float:
         """
