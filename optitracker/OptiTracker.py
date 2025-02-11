@@ -1,6 +1,5 @@
 import os
 import numpy as np
-import sqlite3
 from scipy.signal import butter, sosfiltfilt
 
 # import warnings
@@ -13,7 +12,7 @@ from scipy.signal import butter, sosfiltfilt
 # refactor nomeclature about frame indexing/querying
 
 
-class OptiTracker(object):
+class Optitracker(object):
     """A class for processing and analyzing 3D motion tracking data.
 
     This class handles loading, processing, and analyzing positional data from motion
@@ -25,12 +24,11 @@ class OptiTracker(object):
         sample_rate (int): Data sampling rate in Hz
         window_size (int): Size of the temporal window for calculations (in frames)
         data_dir (str): Path to the data file containing tracking data
-        rescale_by (float): Factor to rescale position data (e.g., 1000 for m to mm)
-        db (sqlite3.Connection): Database connection for storing processed data
+        rescale_by (float): Factor to rescale position data (e.g., 1000 for m to mm); default is 1000
 
     Note:
-        The data file should be a CSV with columns: frame_number, pos_x, pos_y, pos_z
-        Position data is automatically rescaled by multiplying with rescale_by factor
+        I cannot get Motive to return millimeters (vs meters) for position data, so
+        position data is automatically rescaled by multiplying with rescale_by factor.
     """
 
     def __init__(
@@ -40,8 +38,6 @@ class OptiTracker(object):
         window_size: int = 5,
         data_dir: str = "",
         rescale_by: int | float = 1000,
-        # coerce_to_int: bool = True,
-        db_name: str = "optitracker.db",
     ):
         """Initialize the OptiTracker object.
 
@@ -51,54 +47,36 @@ class OptiTracker(object):
             window_size (int, optional): Number of frames for temporal calculations. Defaults to 5.
             data_dir (str, optional): Path to the tracking data file. Defaults to "".
             rescale_by (float, optional): Factor to rescale position values. Defaults to 1000.
-            db_name (str, optional): Name of SQLite database file. Defaults to "optitracker.db".
 
         Raises:
-            ValueError: If marker_count is not positive
-            sqlite3.Error: If database connection fails
+            ValueError: If marker_count is non-positive integer
+            ValueError: If sample_rate is non-positive integer
+            ValueError: If window_size is non-positive integer
+            ValueError: If rescale_by is non-positive numeric
         """
 
-        if marker_count:
-            self.__marker_count = marker_count
+        if marker_count <= 0:
+            raise ValueError("Marker count must be positive.")
+        self.__marker_count = marker_count
 
+        if sample_rate <= 0:
+            raise ValueError("Sample rate must be positive.")
         self.__sample_rate = sample_rate
-        self.__data_dir = data_dir
+
+        if window_size < 1:
+            raise ValueError("Window size must be postively non-zero.")
         self.__window_size = window_size
+
+        if rescale_by <= 0.0:
+            raise ValueError("Rescale factor must be positive")
         self.__rescale_by = rescale_by
-        self.db = self.__connect(db_name)
 
-        self.cursor = self.db.cursor()
-
-        db_scheme = """
-        CREATE TABLE IF NOT EXISTS frames (
-            frame_number INTEGER PRIMARY KEY,
-            pos_x REAL,
-            pos_y REAL,
-            pos_z REAL
-        )
-        """
-
-        self.cursor.execute(db_scheme)
-
-    # @property
-    # def database(self) -> str:
-    #     """Get the name of the database file."""
-    #     return self.__database
-    #
-    # @database.setter
-    # def database(self, database: str) -> None:
-    #     """Set the name of the database file."""
-    #     self.__database = database
+        self.__data_dir = data_dir
 
     @property
     def marker_count(self) -> int:
         """Get the number of markers to track."""
         return self.__marker_count
-
-    @marker_count.setter
-    def marker_count(self, marker_count: int) -> None:
-        """Set the number of markers to track."""
-        self.__marker_count = marker_count
 
     @property
     def data_dir(self) -> str:
@@ -115,11 +93,6 @@ class OptiTracker(object):
         """Get the sampling rate."""
         return self.__sample_rate
 
-    @sample_rate.setter
-    def sample_rate(self, sample_rate: int) -> None:
-        """Set the sampling rate."""
-        self.__sample_rate = sample_rate
-
     @property
     def rescale_by(self) -> int | float:
         """Get the rescaling factor used to convert position data.
@@ -129,30 +102,10 @@ class OptiTracker(object):
         """
         return self.__rescale_by
 
-    @rescale_by.setter
-    def rescale_by(self, rescale_by: int | float) -> None:
-
-        """Set the rescaling factor for position data.
-
-        Args:
-            rescale_by (int): Factor to multiply position values by (must be positive)
-
-        Raises:
-            ValueError: If rescale_by is not positive
-        """
-        if rescale_by <= 0.0:
-            raise ValueError("Rescale factor must be positive")
-        self.__rescale_by = rescale_by
-
     @property
     def window_size(self) -> int:
         """Get the window size."""
         return self.__window_size
-
-    @window_size.setter
-    def window_size(self, window_size: int) -> None:
-        """Set the window size."""
-        self.__window_size = window_size
 
     def velocity(self, num_frames: int = 0) -> float:
         """Calculate the current velocity from position data.
@@ -210,7 +163,7 @@ class OptiTracker(object):
             num_frames = self.__window_size
 
         frames = self.__query_frames(num_frames)
-        return self.__euclidean_distance(frames)
+        return self.__euclidean_distance(frames=frames)
 
     def __velocity(self, frames: np.ndarray = np.array([])) -> float:
         """
@@ -228,11 +181,11 @@ class OptiTracker(object):
         if len(frames) == 0:
             frames = self.__query_frames()
 
-        euclidean_distance = self.__euclidean_distance(frames)
+        euclidean_distance = self.__euclidean_distance(frames=frames)
 
         return euclidean_distance / (frames.shape[0] / self.__sample_rate)
 
-    def __euclidean_distance(self, frames: np.ndarray = np.array([])) -> float:
+    def __euclidean_distance(self, smooth: bool = False, frames: np.ndarray = np.array([])) -> float:
         """
         Calculate Euclidean distance between first and last frames.
 
@@ -246,7 +199,7 @@ class OptiTracker(object):
         if frames.size == 0:
             frames = self.__query_frames()
 
-        positions = self.__column_means(smooth = True, frames = frames)
+        positions = self.__column_means(smooth = smooth, frames = frames)
 
         return float(
             np.sqrt(
@@ -338,7 +291,7 @@ class OptiTracker(object):
         means = np.zeros(
             len(frames) // self.__marker_count,
             dtype=[
-                ("frame", "i8"),
+                ("frame_number", "i8"),
                 ("pos_x", "f8"),
                 ("pos_y", "f8"),
                 ("pos_z", "f8"),
@@ -463,11 +416,3 @@ class OptiTracker(object):
 
         return data
 
-    def __connect(self, db_name: str = "optitracker.db") -> sqlite3.Connection:
-        """
-        Connect to the SQLite database.
-
-        Returns:
-            sqlite3.Connection: Connection object
-        """
-        return sqlite3.connect(db_name)
