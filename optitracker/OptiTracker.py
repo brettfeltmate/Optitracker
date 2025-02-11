@@ -181,9 +181,13 @@ class Optitracker(object):
         if len(frames) == 0:
             frames = self.__query_frames()
 
+        # calculate Euclidean distance
         euclidean_distance = self.__euclidean_distance(frames=frames)
 
-        return euclidean_distance / (frames.shape[0] / self.__sample_rate)
+        # adjust frame count to account for marker count
+        frame_count = frames.shape[0] / self.__marker_count
+
+        return euclidean_distance / (frame_count / self.__sample_rate)
 
     def __euclidean_distance(self, smooth: bool = False, frames: np.ndarray = np.array([])) -> float:
         """
