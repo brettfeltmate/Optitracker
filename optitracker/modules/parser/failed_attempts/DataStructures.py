@@ -2,7 +2,6 @@
 from construct import Struct, CString, Computed, this, Tell, Probe
 from construct import Int16sl, Int32ul, Int64ul, Float32l
 
-
 # Frame prefix structure
 dataStruct_Prefix = Struct(
     "asset_type" / Computed("Prefix"),
