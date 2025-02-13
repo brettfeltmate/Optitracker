@@ -64,35 +64,30 @@ class Optitracker(object):
             ValueError: If window_size is non-positive integer
             ValueError: If rescale_by is non-positive numeric
         """
-        self.__console_logging = console_logging
-        if self.__console_logging:
-            self.console = Console()
-
-        if marker_count <= 0:
-            raise ValueError('Marker count must be positive.')
-        self.__marker_count = marker_count
-
         if sample_rate <= 0:
             raise ValueError('Sample rate must be positive.')
-        self.__sample_rate = sample_rate
-
+        if marker_count <= 0:
+            raise ValueError('Marker count must be positive.')
         if window_size < 1:
             raise ValueError('Window size must be postively non-zero.')
-        self.__window_size = window_size
-
         if rescale_by <= 0.0:
             raise ValueError('Rescale factor must be positive')
+
+        self.__console_logging = console_logging
+        self.__marker_count = marker_count
+        self.__sample_rate = sample_rate
+        self.__window_size = window_size
         self.__rescale_by = rescale_by
-
         self.__data_dir = data_dir
-
         self.__smooth_data = smooth_data
+
+        if self.__console_logging:
+            self.console = Console()
 
         if init_natnet:
             self.__natnet_listening = False
             self.__natnet = NatNetClient()
             self.__natnet.listeners['marker'] = self.__write_frames  # type: ignore
-
         else:
             self.__natnet = None
 
@@ -118,11 +113,7 @@ class Optitracker(object):
 
     @property
     def rescale_by(self) -> int | float:
-        """Get the rescaling factor used to convert position data.
-
-        This factor is multiplied with all position values after reading from file.
-        For example, use 1000 to convert meters to millimeters.
-        """
+        """Get the rescaling factor applied to position data. """
         return self.__rescale_by
 
     @property
@@ -160,20 +151,27 @@ class Optitracker(object):
 
     def stop_listening(self) -> None:
         """Stop listening for NatNet data."""
+
         if self.__natnet is None:
+
             raise RuntimeError('NatNet client not initialized.')
 
         if self.__natnet_listening:
             self.__natnet.shutdown()
             self.__natnet_listening = False
 
-    def query_frames(
-        self, num_frames: int = 0, console_logging: bool | None = None
+    def frames(
+        self,
+        num_frames: int | None = None,
+        console_logging: bool | None = None,
     ) -> np.ndarray:
+
         """Query the most recent frames from the tracking data.
 
+
         Args:
-            num_frames (int, optional): Number of frames to query. If 0, uses the instance's window_size. Defaults to 0.
+
+            num_frames (int, optional): Number of frames to query. If None (default), queries window_size frames.
 
         Returns:
             np.ndarray: Structured array of frame data with fields:
@@ -187,187 +185,314 @@ class Optitracker(object):
             FileNotFoundError: If data file does not exist
             ValueError: If num_frames is negative
         """
-        return self.__query_frames(
+        return self.__read_frames(
             num_frames=num_frames,
-            console_logging=self.__console_logging or console_logging,
-        )
-
-    def velocity(
-        self,
-        num_frames: int = 0,
-        smooth: bool | None = None,
-        console_logging: bool | None = None,
-    ) -> float:
-        """Calculate the current velocity from position data.
-
-        Computes velocity by measuring displacement over time using the specified
-        number of frames or the default window size.
-
-        Args:
-            num_frames (int, optional): Number of frames to use for calculation.
-                If 0, uses the instance's window_size. Defaults to 0.
-            smooth (bool, optional): Whether to apply Butterworth smoothing. Defaults to None.
-
-        Returns:
-            float: Calculated velocity in units/second (based on rescale_by factor)
-
-        Raises:
-            ValueError: If num_frames is less than 2
-        """
-        if num_frames == 0:
-            num_frames = self.__window_size
-
-        if num_frames < 2:
-            raise ValueError('Window size must cover at least two frames.')
-
-        frames = self.__query_frames(num_frames)
-
-        return self.__velocity(
-            frames=frames,
-            smooth=self.__smooth_data or smooth,
             console_logging=self.__console_logging or console_logging,
         )
 
     def position(
         self,
-        num_frames: int = 1,
-        smooth: bool | None = None,
+        frames: np.ndarray = np.array([]),
+        smoothed: bool | None = None,
+        num_frames: int | None = None,
+        instantaneous: bool = False,
+        axes: str | list[str] = 'all',
         console_logging: bool | None = None,
-    ) -> np.ndarray:
-        """Calculates and returns mean position(s) for the last n frames.
+    ):
+        """Compute the mean position for each of the last num_frames.
 
         Args:
-            num_frames (int, optional): Number of frames to calculate mean position over. Defaults to 1.
+            frames (np.ndarray, optional): Array of frame data. Defaults to querying self.__window_size if unprovided.
+            smoothed (bool, optional): Whether to apply Butterworth smoothing. Defaults to self.__smooth_data.
+            num_frames (int, optional): Number of frames to query. Defaults to self.__window_size.
+            instantaneous (bool, optional): Whether to return the current position. Defaults to False (returns positions across window_size).
+            axes (str | list[str], optional): Axes for which to return positions ('all', 'x', 'y', 'z'). Defaults to 'all'.
+            console_logging (bool, optional): Whether to enable console_logging mode. Defaults to self.__console_logging.
 
         Returns:
-            np.ndarray: Structured array containing the mean position with fields:
+            np.ndarray: Structured array of mean positions with fields:
                 - frame_number (int): Frame identifier
-                - pos_x (float): X coordinate
-                - pos_y (float): Y coordinate
-                - pos_z (float): Z coordinate
+                - pos_x (float): Mean X coordinate if 'all' or 'x' specified
+                - pos_y (float): Mean Y coordinate if 'all' or 'y' specified
+                - pos_z (float): Mean Z coordinate if 'all' or 'z' specified
         """
-        frames = self.__query_frames(num_frames=num_frames)
 
-        return self.__column_means(
+        if smoothed and num_frames == 1:
+            raise ValueError('Cannot smooth a single frame.')
+
+        if not isinstance(axes, list):
+            axes = [axes]
+
+        if not all(axis in ['all', 'x', 'y', 'z'] for axis in axes):
+            raise ValueError(
+                'Invalid axes specified. Must be "all", "x", "y", "z", or list thereof.'
+            )
+
+        if frames.size == 0:
+            frames = self.__read_frames(num_frames=num_frames)
+
+        positions = self.__compute(
+            metric='position',
+            smooth=smoothed,
             frames=frames,
-            smooth=self.__smooth_data or smooth,
             console_logging=self.__console_logging or console_logging,
         )
+
+        if axes == 'all':
+            return positions[-1, :] if instantaneous else positions
+        else:
+            return positions[-1, :][axes] if instantaneous else positions[axes]
 
     def distance(
         self,
-        num_frames: int = 0,
-        smooth: bool | None = None,
+        frames: np.ndarray = np.array([]),
+        smoothed: bool | None = None,
+        num_frames: int | None = None,
+        instantaneous: bool = False,
+        axes: str | list[str] = 'all',
         console_logging: bool | None = None,
-    ) -> float:
-        """Calculate the Euclidean distance traveled over specified frames.
+    ) -> np.ndarray:
+        """Compute the Euclidean distance between the first and last frames.
 
         Args:
-            num_frames (int, optional): Number of frames to calculate distance over.
-                If 0, uses the instance's window_size. Defaults to 0.
+            frames (np.ndarray, optional): Array of frame data. Defaults to querying self.__window_size if unprovided.
+            smoothed (bool, optional): Whether to apply Butterworth smoothing. Defaults to self.__smooth_data.
+            num_frames (int, optional): Number of frames to query. Defaults to self.__window_size.
+            instantaneous (bool, optional): Whether to return the current distance. Defaults to False (returns distances across window_size).
+            axes (str | list[str], optional): Axes for which to return distances ('all', 'x', 'y', 'z'). Defaults to 'all'.
+            console_logging (bool, optional): Whether to enable console_logging mode. Defaults to self.__console_logging.
 
         Returns:
-            float: Euclidean distance between start and end positions
-
-        Note:
-            Distance is calculated using smoothed position data if smoothing is enabled
+            np.ndarray: Structured array of euclidean distances with fields:
+                - frame_number (int): Frame identifier
+                - dx (float): X distance
+                - dy (float): Y distance
+                - dz (float): Z distance
         """
+        if not isinstance(axes, list):
+            axes = [axes]
 
-        if num_frames == 0:
-            num_frames = self.__window_size
+        if not all(axis in ['all', 'x', 'y', 'z'] for axis in axes):
+            raise ValueError(
+                'Invalid axes specified. Must be "all", "x", "y", "z", or list thereof.'
+            )
 
-        frames = self.__query_frames(num_frames)
+        if frames.size == 0:
+            frames = self.__read_frames(num_frames=num_frames)
 
-        return self.__euclidean_distance(
+        distances = self.__compute(
+            metric='distance',
+            smooth=smoothed,
             frames=frames,
-            smooth=self.__smooth_data or smooth,
             console_logging=self.__console_logging or console_logging,
         )
 
-    def __velocity(
+        if axes == 'all':
+            return distances[-1, :] if instantaneous else distances
+        else:
+            return distances[-1, :][axes] if instantaneous else distances[axes]
+
+    def velocity(
         self,
+        frames: np.ndarray = np.array([]),
+        smoothed: bool | None = None,
+        num_frames: int | None = None,
+        instantaneous: bool = False,
+        axes: str | list[str] = 'all',
+        console_logging: bool | None = None,
+    ) -> np.ndarray:
+        """Compute the velocity of the asset across the last num_frames.
+
+        Args:
+            frames (np.ndarray, optional): Array of frame data. Defaults to querying self.__window_size if unprovided.
+            smoothed (bool, optional): Whether to apply Butterworth smoothing. Defaults to self.__smooth_data.
+            num_frames (int, optional): Number of frames to query. Defaults to self.__window_size.
+            instantaneous (bool, optional): Whether to return the current velocity. Defaults to False (returns velocities across window_size).
+            axes (str | list[str], optional): Axes for which to return distances ('all', 'x', 'y', 'z'). Defaults to 'all'.
+            console_logging (bool, optional): Whether to enable console_logging mode. Defaults to self.__console_logging.
+
+        Returns:
+            np.ndarray: Structured array of velocities with fields:
+                - frame_number (int): Frame identifier
+                - vx (float): X velocity (if 'all' or 'x' specified)
+                - vy (float): Y velocity (if 'all' or 'y' specified)
+                - vz (float): Z velocity (if 'all' or 'z' specified)
+        """
+
+        if not isinstance(axes, list):
+            axes = [axes]
+        if not all(axis in ['all', 'x', 'y', 'z'] for axis in axes):
+            raise ValueError(
+                'Invalid axes specified. Must be "all", "x", "y", "z", or list thereof.'
+            )
+
+        if frames.size == 0:
+            frames = self.__read_frames(num_frames=num_frames)
+
+        velocities = self.__compute(
+            metric='velocity',
+            smooth=smoothed,
+            frames=frames,
+            console_logging=self.__console_logging or console_logging,
+        )
+
+        if axes == 'all':
+            if not instantaneous:
+                return velocities
+            else:
+                # Get final velocity vector
+                v = velocities[-1]
+                # Calculate magnitude
+                magnitude = np.sqrt(v['vx'] ** 2 + v['vy'] ** 2 + v['vz'] ** 2)
+                # Get dominant axis velocity
+                dominant_axis = max(
+                    ['vx', 'vy', 'vz'], key=lambda ax: abs(v[ax])
+                )
+                # Return signed magnitude
+                return magnitude * np.sign(v[dominant_axis])
+        else:
+            return (
+                velocities[-1, :][axes] if instantaneous else velocities[axes]
+            )
+
+    def __compute(
+        self,
+        metric: str,
         frames: np.ndarray = np.array([]),
         smooth: bool | None = None,
         console_logging: bool | None = None,
-    ) -> float:
-        """
-        Calculate velocity using position data over the specified window.
+    ) -> np.ndarray:
+        """Compute the specified metric for the most recent frames.
 
         Args:
-            frames (np.ndarray, optional): Array of frame data; queries last window_size frames if empty.
+            metric (str): Metric to compute ('position', 'distance', 'velocity')
+            frames (np.ndarray, optional): Array of frame data. If empty, queries last window_size frames. Defaults to empty array.
+            smooth (bool, optional): Whether to apply Butterworth smoothing. Defaults to False.
+        """
+
+        if metric not in ['position', 'distance', 'velocity']:
+            raise ValueError('Invalid metric specified.')
+
+        if frames.size == 0:
+            raise ValueError('No frame data provided.')
+
+        positions = self.__asset_position(
+            frames=frames,
+            smooth=smooth,
+            console_logging=self.__console_logging or console_logging,
+        )
+
+        if metric == 'position':
+            return positions
+
+        distances = self.__asset_euclidean_distance(
+            positions=positions,
+            console_logging=self.__console_logging or console_logging,
+        )
+
+        if metric == 'distance':
+            return distances
+
+        velocities = self.__asset_velocity(
+            distances=distances,
+            console_logging=self.__console_logging or console_logging,
+        )
+
+        return velocities
+
+    def __asset_velocity(
+        self,
+        distances: np.ndarray = np.array([]),
+        console_logging: bool | None = None,
+    ) -> np.ndarray:
+
+        """Calculate velocity using speed data over the specified window.
+
+        Args:
+            distances (np.ndarray, optional): Array of euclidean distances.
+            axis (str, optional): Axis along which to calculate velocity ('all', 'x', 'y', 'z'). Defaults to 'all'.
 
         Returns:
-            float: Calculated velocity in units/second (based on rescale_by factor)
+            np.ndarray: Array of velocities with fields:
+                - frame_number (int): Frame identifier
+                - velocity (float): Velocity along the specified axes
         """
-        if self.__window_size < 2:
-            raise ValueError('Window size must cover at least two frames.')
+        if distances.size == 0:
+            raise ValueError('No distance data provided.')
 
-        if len(frames) == 0:
-            frames = self.__query_frames()
+        # Create output array with the correct dtype
+        velocities = np.zeros(
+            len(distances),
+            dtype=[
+                ('frame_number', 'i8'),
+                ('vx', 'f8'),
+                ('vy', 'f8'),
+                ('vz', 'f8'),
+            ],
+        )
 
-        # Get mean positions for each frame (averaging across markers)
-        positions = self.__column_means(frames=frames, smooth=self.__smooth_data or smooth)
-        
-        # Calculate instantaneous velocities between consecutive frames
-        velocities = []
-        for i in range(len(positions) - 1):
-            # Calculate displacement between consecutive frames
-            dx = positions['pos_x'][i+1] - positions['pos_x'][i]
-            dy = positions['pos_y'][i+1] - positions['pos_y'][i]
-            dz = positions['pos_z'][i+1] - positions['pos_z'][i]
-            
-            # Calculate Euclidean distance for this step
-            distance = np.sqrt(dx**2 + dy**2 + dz**2)
-            
-            # Time between frames
-            dt = 1.0 / self.__sample_rate
-            
-            # Calculate instantaneous velocity
-            velocities.append(distance / dt)
+        velocities['vx'][:] = np.diff(distances['dx']) / (
+            1.0 / self.__sample_rate
+        )
+        velocities['vy'][:] = np.diff(distances['dy']) / (
+            1.0 / self.__sample_rate
+        )
+        velocities['vz'][:] = np.diff(distances['dz']) / (
+            1.0 / self.__sample_rate
+        )
 
         if self.__console_logging or console_logging:
-            print('\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n__velocity()\n')
+            print('\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n')
+            print('\n\n __velocity()\n\n')
             self.console.log(log_locals=True)
             print('\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n')
 
-        # Return mean velocity over the window
-        return float(np.mean(velocities))
+        return velocities[
+            :,
+        ]
 
-    def __euclidean_distance(
+    def __asset_euclidean_distance(
         self,
-        frames: np.ndarray = np.array([]),
-        smooth: bool | None = None,
+        positions: np.ndarray = np.array([]),
         console_logging: bool | None = None,
-    ) -> float:
+    ) -> np.ndarray:
         """
         Calculate Euclidean distance between first and last frames.
 
         Args:
             frames (np.ndarray, optional): Array of frame data; queries last window_size frames if empty.
+            axis (str, optional): Axis along which to calculate distance ('all', 'x', 'y', 'z'). Defaults to 'all'.
 
         Returns:
             float: Euclidean distance
         """
 
-        if frames.size == 0:
-            frames = self.__query_frames()
+        if positions.size == 0:
+            raise ValueError('No frame data provided.')
 
-        positions = self.__column_means(
-            frames=frames, smooth=self.__smooth_data or smooth
+        # Create np array of momentary euclidean distances
+        distances = np.zeros(
+            len(positions) - 1,
+            dtype=[
+                ('frame_number', 'i8'),
+                ('dx', 'f8'),
+                ('dy', 'f8'),
+                ('dz', 'f8'),
+            ],
         )
 
+        # Calculate momentary distances
+        distances['dx'][:] = np.diff(positions['px'])
+        distances['dy'][:] = np.diff(positions['py'])
+        distances['dz'][:] = np.diff(positions['pz'])
+
         if self.__console_logging or console_logging:
-            print('\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n__smooth()\n')
+            print('\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n')
+            print('\n\n __euclidean_distance()\n\n')
             self.console.log(log_locals=True)
             print('\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n')
 
-        return float(
-            np.sqrt(
-                (positions['pos_x'][-1] - positions['pos_x'][0]) ** 2
-                + (positions['pos_y'][-1] - positions['pos_y'][0]) ** 2
-                + (positions['pos_z'][-1] - positions['pos_z'][0]) ** 2
-            )
-        )
+        return distances
 
     # TODO: reduce dependencies by hand-rolling a butterworth filter
 
@@ -401,17 +526,17 @@ class Optitracker(object):
         Note:
             The filter is applied separately to each position dimension
         """
-        if len(frames) == 0:
-            frames = self.__query_frames()
+        if frames.size == 0:
+            raise ValueError('No frame data provided.')
 
         # Create output array with the correct dtype
         smoothed = np.zeros(
             len(frames),
             dtype=[
                 ('frame_number', 'i8'),
-                ('pos_x', 'f8'),
-                ('pos_y', 'f8'),
-                ('pos_z', 'f8'),
+                ('px', 'f8'),
+                ('py', 'f8'),
+                ('pz', 'f8'),
             ],
         )
 
@@ -424,18 +549,19 @@ class Optitracker(object):
         )
 
         smoothed['frame_number'][:] = frames['frame_number'][:]
-        smoothed['pos_x'][:] = sosfiltfilt(sos=butt, x=frames['pos_x'][:])
-        smoothed['pos_y'][:] = sosfiltfilt(sos=butt, x=frames['pos_y'][:])
-        smoothed['pos_z'][:] = sosfiltfilt(sos=butt, x=frames['pos_z'][:])
+        smoothed['px'][:] = sosfiltfilt(sos=butt, x=frames['px'][:])
+        smoothed['py'][:] = sosfiltfilt(sos=butt, x=frames['py'][:])
+        smoothed['pz'][:] = sosfiltfilt(sos=butt, x=frames['pz'][:])
 
         if self.__console_logging or console_logging:
-            print('\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n__smooth()\n')
+            print('\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n')
+            print('\n\n __smooth()\n\n')
             self.console.log(log_locals=True)
             print('\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n')
 
         return smoothed
 
-    def __column_means(
+    def __asset_position(
         self,
         frames: np.ndarray = np.array([]),
         smooth: bool | None = None,
@@ -463,16 +589,16 @@ class Optitracker(object):
             If smooth=True, means are filtered using the __smooth method
         """
         if len(frames) == 0:
-            frames = self.__query_frames()
+            raise ValueError('No frame data provided.')
 
         # Create output array with the correct dtype
-        means = np.zeros(
+        positions = np.zeros(
             len(frames) // self.__marker_count,
             dtype=[
                 ('frame_number', 'i8'),
-                ('pos_x', 'f8'),
-                ('pos_y', 'f8'),
-                ('pos_z', 'f8'),
+                ('px', 'f8'),
+                ('py', 'f8'),
+                ('pz', 'f8'),
             ],
         )
 
@@ -483,42 +609,32 @@ class Optitracker(object):
 
         for frame_number in range(start, stop):
 
-            frame = frames[
+            this_frame = frames[
                 frames['frame_number'] == frame_number,
             ]
 
-            means[idx]['frame_number'] = frame_number
-            means[idx]['pos_x'] = np.mean(frame['pos_x'])
-            means[idx]['pos_y'] = np.mean(frame['pos_y'])
-            means[idx]['pos_z'] = np.mean(frame['pos_z'])
+            positions[idx]['frame_number'] = frame_number
+            positions[idx]['px'] = np.mean(this_frame['pos_x'])
+            positions[idx]['py'] = np.mean(this_frame['pos_y'])
+            positions[idx]['pz'] = np.mean(this_frame['pos_z'])
 
             idx += 1
 
-            # try:
-            #
-            #     means[idx]["pos_x"] = np.mean(frame["pos_x"])
-            #     means[idx]["pos_y"] = np.mean(frame["pos_y"])
-            #     means[idx]["pos_z"] = np.mean(frame["pos_z"])
-            #
-            #     idx += 1
-            #
-            # except RuntimeWarning:
-            #     means[idx]["pos_x"] = 0.0
-            #     means[idx]["pos_y"] = 0.0
-            #     means[idx]["pos_z"] = 0.0
-
         if smooth or self.__smooth_data:
-            means = self.__smooth(frames=means)
+            positions = self.__smooth(frames=positions)
 
         if console_logging or self.__console_logging:
-            print('\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n__column_means()\n')
+            print('\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n')
+            print('\n\n __asset_position()\n\n')
             self.console.log(log_locals=True)
             print('\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n')
 
-        return means
+        return positions
 
-    def __query_frames(
-        self, num_frames: int = 0, console_logging: bool | None = None
+    def __read_frames(
+        self,
+        num_frames: int | None = None,
+        console_logging: bool | None = None,
     ) -> np.ndarray:
         """Load and process frame data from the tracking data file.
 
@@ -527,7 +643,7 @@ class Optitracker(object):
 
         Args:
             num_frames (int, optional): Number of most recent frames to return.
-                If 0, uses the instance's window_size. Defaults to 0.
+                If None (default), defaults to the instance's window_size.
 
         Returns:
             np.ndarray: Structured array of frame data with fields:
@@ -554,9 +670,16 @@ class Optitracker(object):
                 f'Data directory not found at:\n{self.__data_dir}'
             )
 
+
+        # Set num_frames to window_size if not specified
+        if num_frames is None:
+            num_frames = self.__window_size
+
+        # If provided, validate num_frames
         if num_frames < 0:
             raise ValueError('Number of frames cannot be negative.')
 
+        # Validate data format
         with open(self.__data_dir, 'r') as file:
             header = file.readline().strip().split(',')
 
@@ -568,8 +691,8 @@ class Optitracker(object):
                 'Data file must contain columns named frame_number, pos_x, pos_y, pos_z.'
             )
 
+        # Map column names to dtypes
         dtype_map = [
-            # coerce expected columns to float, int, string (default)
             (
                 name,
                 (
@@ -583,21 +706,14 @@ class Optitracker(object):
             for name in header
         ]
 
-        # read in data now that columns have been validated and typed
+        # read in data
         data = np.genfromtxt(
             self.__data_dir, delimiter=',', dtype=dtype_map, skip_header=1
         )
 
-        # Rescale position data (e.g., convert meters to millimeters)
-        if self.__rescale_by <= 0.0:
-            raise ValueError('Rescale factor must be positive')
-
-        # TODO: make this a param
+        # Rescale coordinate data
         for col in ['pos_x', 'pos_y', 'pos_z']:
             data[col][:] = data[col][:] * self.__rescale_by
-
-        if num_frames == 0:
-            num_frames = self.__window_size
 
         # Calculate which frames to include
         last_frame = data['frame_number'][-1]
@@ -607,7 +723,8 @@ class Optitracker(object):
         data = data[data['frame_number'] > lookback]
 
         if self.__console_logging or console_logging:
-            print('\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n__query_frames()\n')
+            print('\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n')
+            print('\n\n __read_frames()\n\n')
             self.console.log(log_locals=True)
             print('\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n')
 
