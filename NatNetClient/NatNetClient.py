@@ -20,7 +20,7 @@ import time
 from threading import Thread
 from typing import Any, Callable, Union
 
-from optitracker.modules.parser.DataParser import DataParser as Parser
+from ..MotiveStreamParser.MotiveStreamParser import MotiveStreamParser as Parser
 
 
 def trace(*args):

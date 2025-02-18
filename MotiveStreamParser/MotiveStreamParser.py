@@ -1,6 +1,6 @@
 # type: ignore
 
-from optitracker.modules.parser.ParsingStructures import structs
+from ..MotiveStreamParser.MotivePacketStructures import packet_structs as structs
 
 from typing import Container
 
