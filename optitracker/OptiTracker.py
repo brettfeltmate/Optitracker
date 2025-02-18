@@ -305,23 +305,27 @@ class Optitracker(object):
         if len(frames) == 0:
             frames = self.__query_frames()
 
+        self.__validate_frames(frames)
+
         # Get mean positions for each frame (averaging across markers)
-        positions = self.__column_means(frames=frames, smooth=self.__smooth_data or smooth)
-        
+        positions = self.__column_means(
+            frames=frames, smooth=self.__smooth_data or smooth
+        )
+
         # Calculate instantaneous velocities between consecutive frames
         velocities = []
         for i in range(len(positions) - 1):
             # Calculate displacement between consecutive frames
-            dx = positions['pos_x'][i+1] - positions['pos_x'][i]
-            dy = positions['pos_y'][i+1] - positions['pos_y'][i]
-            dz = positions['pos_z'][i+1] - positions['pos_z'][i]
-            
+            dx = positions['pos_x'][i + 1] - positions['pos_x'][i]
+            dy = positions['pos_y'][i + 1] - positions['pos_y'][i]
+            dz = positions['pos_z'][i + 1] - positions['pos_z'][i]
+
             # Calculate Euclidean distance for this step
             distance = np.sqrt(dx**2 + dy**2 + dz**2)
-            
+
             # Time between frames
             dt = 1.0 / self.__sample_rate
-            
+
             # Calculate instantaneous velocity
             velocities.append(distance / dt)
 
@@ -351,6 +355,8 @@ class Optitracker(object):
 
         if frames.size == 0:
             frames = self.__query_frames()
+
+        self.__validate_frames(frames)
 
         positions = self.__column_means(
             frames=frames, smooth=self.__smooth_data or smooth
@@ -403,6 +409,8 @@ class Optitracker(object):
         """
         if len(frames) == 0:
             frames = self.__query_frames()
+
+        self.__validate_frames(frames)
 
         # Create output array with the correct dtype
         smoothed = np.zeros(
@@ -465,6 +473,8 @@ class Optitracker(object):
         if len(frames) == 0:
             frames = self.__query_frames()
 
+        self.__validate_frames(frames)
+
         # Create output array with the correct dtype
         means = np.zeros(
             len(frames) // self.__marker_count,
@@ -516,6 +526,42 @@ class Optitracker(object):
             print('\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n')
 
         return means
+
+    def __validate_frames(self, frames: np.ndarray) -> None:
+        """Validate the frame data to ensure it is in the expected format.
+
+        Args:
+            frames (np.ndarray): Structured array of frame data with fields:
+
+        Raises:
+            ValueError: If frame data is missing or incomplete
+
+        """
+
+        # Check for missing frames
+        expected_frame_numbers = set(
+            range(
+                frames['frame_number'].min(), frames['frame_number'].max() + 1
+            )
+        )
+
+        recieved_frame_numbers = set(frames['frame_number'])
+
+        if expected_frame_numbers != recieved_frame_numbers:
+            raise ValueError('Handling of missing frames not yet implemented.')
+
+        # Validate no missing values in critical tracking data
+        for field in ['frame_number', 'pos_x', 'pos_y', 'pos_z']:
+            if np.any(np.isnan(frames[field])):
+                raise ValueError(f'Missing or invalid values detected in {field}')
+
+        if self.__console_logging:
+            print('\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n')
+            print('\n')
+            print('__validate_frames()\n')
+            self.console.log(log_locals=True)
+            print('\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n')
+
 
     def __query_frames(
         self, num_frames: int = 0, console_logging: bool | None = None
@@ -585,8 +631,17 @@ class Optitracker(object):
 
         # read in data now that columns have been validated and typed
         data = np.genfromtxt(
-            self.__data_dir, delimiter=',', dtype=dtype_map, skip_header=1
+            self.__data_dir,
+            delimiter=',',
+            dtype=dtype_map,
+            skip_header=1,
+            missing_values=('', 'NA', 'nan', 'None'),
+            filling_values=None
         )
+
+
+        # Check for missing frames
+        self.__validate_frames(data)
 
         # Rescale position data (e.g., convert meters to millimeters)
         if self.__rescale_by <= 0.0:
