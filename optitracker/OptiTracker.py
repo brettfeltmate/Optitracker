@@ -4,7 +4,7 @@ from csv import DictWriter
 from scipy.signal import butter, sosfiltfilt
 from rich.console import Console
 
-from optitracker.modules.natnetclient.NatNetClient import NatNetClient
+from ..NatNetClient.NatNetClient import NatNetClient
 
 # import warnings
 

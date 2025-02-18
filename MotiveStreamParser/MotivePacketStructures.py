@@ -48,7 +48,7 @@ rigid_body = Struct(
     "is_valid" / Computed(lambda ctx: (ctx.tracking & 0x01) != 0),
 )
 
-structs = {
+packet_structs = {
     "label": CString("utf8"),
     "size": Int32ul,
     "count": Int32ul,

@@ -1,11 +1,11 @@
 # type: ignore
 
-from optitracker.modules.parser.ParsingStructures import structs
+from ..MotiveStreamParser.MotivePacketStructures import packet_structs as structs
 
 from typing import Container
 
 
-class DataParser(object):
+class MotiveStreamParser(object):
     def __init__(self, stream: bytes):
         self.__stream = memoryview(stream)
         self.__offset = 0
