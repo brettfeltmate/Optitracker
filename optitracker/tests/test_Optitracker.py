@@ -67,6 +67,7 @@ class TestOptitracker(unittest.TestCase):
             window_size=3,
             data_dir=self.data_file,
             rescale_by=1000,
+            primary_axis='z',
         )
 
     def tearDown(self):
@@ -113,39 +114,85 @@ class TestOptitracker(unittest.TestCase):
     def test_velocity(self):
         """Test velocity calculation."""
 
-        expected = np.sqrt(3) / (1 / self.tracker.sample_rate)
+        def expected(all):
+            dd = 1
+            if all:
+                dd = np.sqrt(3)
+            return dd / (1 / self.tracker.sample_rate)
 
         num_frames = 3
+        velocity = self.tracker.velocity(num_frames=num_frames, axis='all')
+        self.assertIsInstance(velocity, float)
+        self.assertAlmostEqual(velocity, expected(True))
+
+        velocity = self.tracker.velocity(num_frames=num_frames, axis='z')
+        self.assertIsInstance(velocity, float)
+        self.assertAlmostEqual(velocity, expected(False))
+
         velocity = self.tracker.velocity(num_frames=num_frames)
         self.assertIsInstance(velocity, float)
-        self.assertAlmostEqual(velocity, expected)
+        self.assertAlmostEqual(velocity, expected(False))
 
         num_frames = 5
+        velocity = self.tracker.velocity(num_frames=num_frames, axis='all')
+        self.assertIsInstance(velocity, float)
+        self.assertAlmostEqual(velocity, expected(True))
+
+        velocity = self.tracker.velocity(num_frames=num_frames, axis='z')
+        self.assertIsInstance(velocity, float)
+        self.assertAlmostEqual(velocity, expected(False))
+
         velocity = self.tracker.velocity(num_frames=num_frames)
         self.assertIsInstance(velocity, float)
-        self.assertAlmostEqual(velocity, expected)
+        self.assertAlmostEqual(velocity, expected(False))
 
         # Test invalid frame count
         with self.assertRaises(ValueError):
             self.tracker.velocity(num_frames=1)
 
-    @unittest.skip('Not implemented')
     def test_distance(self):
         """Test distance calculation."""
 
         # get expected linear distance
-        def expected(num_frames):
-            return np.sqrt(((num_frames - 1) ** 2) * 3)
+        def expected(num_frames, all):
+            if not all:
+                return num_frames - 1
+            return np.sqrt(3) * (num_frames - 1)
+
+        num_frames = 2
+        distance = self.tracker.distance(num_frames=num_frames, axis='all')
+        self.assertIsInstance(distance, float)
+        self.assertAlmostEqual(distance, expected(num_frames, True))
+
+        num_frames = 2
+        distance = self.tracker.distance(num_frames=num_frames, axis='z')
+        self.assertIsInstance(distance, float)
+        self.assertAlmostEqual(distance, expected(num_frames, False))
 
         num_frames = 2
         distance = self.tracker.distance(num_frames=num_frames)
         self.assertIsInstance(distance, float)
-        self.assertAlmostEqual(distance, expected(num_frames))
+        self.assertAlmostEqual(distance, expected(num_frames, False))
+
+        num_frames = 3
+        distance = self.tracker.distance(num_frames=num_frames, axis='all')
+        self.assertIsInstance(distance, float)
+        self.assertAlmostEqual(distance, expected(num_frames, True))
+
+        num_frames = 5
+        distance = self.tracker.distance(num_frames=num_frames, axis='all')
+        self.assertIsInstance(distance, float)
+        self.assertAlmostEqual(distance, expected(num_frames, True))
+
+        num_frames = 5
+        distance = self.tracker.distance(num_frames=num_frames, axis='z')
+        self.assertIsInstance(distance, float)
+        self.assertAlmostEqual(distance, expected(num_frames, False))
 
         num_frames = 5
         distance = self.tracker.distance(num_frames=num_frames)
         self.assertIsInstance(distance, float)
-        self.assertAlmostEqual(distance, expected(num_frames))
+        self.assertAlmostEqual(distance, expected(num_frames, False))
 
     @unittest.skip('Not implemented')
     def test_query_frames_validation(self):
@@ -291,10 +338,9 @@ class TestOptitracker(unittest.TestCase):
 
         # Test that smoothed data has less variance than raw data
         raw_variance = np.var(raw_pos['pos_x'])
-        smooth_variance = np.var(tracker._Optitracker__smooth(frames=raw_pos))
-        self.assertLess(smooth_variance, raw_variance)
+        smooth_variance = np.var(tracker._Optitracker__smooth(frames=raw_pos))  # type: ignore
+        self.assertLess(smooth_variance, raw_variance)  # type: ignore
 
-    @unittest.skip('Not implemented')
     def test_large_dataset(self):
         """Test handling of large datasets."""
         # Create a large dataset

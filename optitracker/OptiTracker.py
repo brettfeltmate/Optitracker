@@ -1,6 +1,9 @@
 import os
 import numpy as np
+from csv import DictWriter
 from rich.console import Console
+
+from ..NatNetClient.NatNetClient import NatNetClient
 
 # import warnings
 
@@ -17,7 +20,7 @@ class Optitracker(object):
 
     This class handles loading, processing, and analyzing positional data from motion
     tracking markers. It provides functionality for calculating velocities, positions,
-    and distances in 3D space, with optional smoothing using Butterworth filtering.
+
 
     Attributes:
         marker_count (int): Number of markers being tracked
@@ -38,9 +41,8 @@ class Optitracker(object):
         window_size: int = 5,
         data_dir: str = '',
         rescale_by: int | float = 1000,
-        smooth_data: bool = False,
         init_natnet: bool = True,
-        console_logging: bool = False,
+        primary_axis: str = 'z',
     ):
         """Initialize the OptiTracker object.
 
@@ -50,21 +52,19 @@ class Optitracker(object):
             window_size (int, optional): Number of frames for temporal calculations. Defaults to 5.
             data_dir (str, optional): Path to the tracking data file. Defaults to "".
             rescale_by (float, optional): Factor to rescale position values. Defaults to 1000.
-            smooth_data (bool, optional): Whether to apply Butterworth smoothing. Defaults to False.
             init_natnet (bool, optional): Whether to initialize NatNet client. Defaults to True.
-            console_logging (bool, optional): Whether to enable console_logging mode. Defaults to False.
+            primary_axis (str): Primary axis of movement (e.g., 'x', 'y', 'z')
 
         Raises:
             ValueError: If marker_count is non-positive integer
             ValueError: If sample_rate is non-positive integer
             ValueError: If window_size is non-positive integer
             ValueError: If rescale_by is non-positive numeric
+            ValueError: If primary_axis is None or empty
+            ValueError: If primary_axis is not 'x', 'y', or 'z'
         """
-        self.__console_logging = console_logging
-        if self.__console_logging:
-            self.console = Console()
-
         self.console = Console()
+
         if marker_count <= 0:
             raise ValueError('Marker count must be positive.')
         self.__marker_count = marker_count
@@ -83,8 +83,6 @@ class Optitracker(object):
 
         self.__data_dir = data_dir
 
-        self.__smooth_data = smooth_data
-
         if init_natnet:
             self.__natnet_listening = False
             self.__natnet = NatNetClient()
@@ -92,6 +90,14 @@ class Optitracker(object):
 
         else:
             self.__natnet = None
+
+        if primary_axis == '' or primary_axis is None:
+            raise ValueError('Primary axis must be specified.')
+
+        if primary_axis not in ['x', 'y', 'z', 'all']:
+            raise ValueError('Primary axis must be one of: x, y, z, all')
+
+        self.__primary_axis = primary_axis
 
     @property
     def marker_count(self) -> int:
@@ -127,16 +133,6 @@ class Optitracker(object):
         """Get the window size."""
         return self.__window_size
 
-    @property
-    def smooth_data(self) -> bool:
-        """Get the smoothing status."""
-        return self.__smooth_data
-
-    @smooth_data.setter
-    def smooth_data(self, smooth_data: bool) -> None:
-        """Set the smoothing status."""
-        self.__smooth_data = smooth_data
-
     def start_listening(self) -> bool:
         """
         Start listening for NatNet data.
@@ -164,9 +160,7 @@ class Optitracker(object):
             self.__natnet.shutdown()
             self.__natnet_listening = False
 
-    def query_frames(
-        self, num_frames: int = 0, console_logging: bool | None = None
-    ) -> np.ndarray:
+    def query_frames(self, num_frames: int = 0) -> np.ndarray:
         """Query the most recent frames from the tracking data.
 
         Args:
@@ -186,14 +180,12 @@ class Optitracker(object):
         """
         return self.__query_frames(
             num_frames=num_frames,
-            console_logging=self.__console_logging or console_logging,
         )
 
     def velocity(
         self,
         num_frames: int = 0,
-        smooth: bool | None = None,
-        console_logging: bool | None = None,
+        axis: str | None = None,
     ) -> float:
         """Calculate the current velocity from position data.
 
@@ -203,7 +195,6 @@ class Optitracker(object):
         Args:
             num_frames (int, optional): Number of frames to use for calculation.
                 If 0, uses the instance's window_size. Defaults to 0.
-            smooth (bool, optional): Whether to apply Butterworth smoothing. Defaults to None.
 
         Returns:
             float: Calculated velocity in units/second (based on rescale_by factor)
@@ -219,21 +210,13 @@ class Optitracker(object):
 
         frames = self.__query_frames(num_frames)
 
-        velocities = self.__calc_vector_velocity(frames)
+        velocities = self.__calc_vector_velocity(frames, axis)
 
         return np.mean(velocities['velocity'], dtype=np.float64)
-
-        return self.__velocity(
-            frames=frames,
-            smooth=self.__smooth_data or smooth,
-            console_logging=self.__console_logging or console_logging,
-        )
 
     def position(
         self,
         num_frames: int = 1,
-        smooth: bool | None = None,
-        console_logging: bool | None = None,
     ) -> np.ndarray:
         """Calculates and returns mean position(s) for the last n frames.
 
@@ -251,17 +234,10 @@ class Optitracker(object):
 
         return self.__calc_position(frames=frame)
 
-        return self.__column_means(
-            frames=frames,
-            smooth=self.__smooth_data or smooth,
-            console_logging=self.__console_logging or console_logging,
-        )
-
     def distance(
         self,
         num_frames: int = 0,
-        smooth: bool | None = None,
-        console_logging: bool | None = None,
+        axis: str | None = None,
     ) -> float:
         """Calculate the Euclidean distance traveled over specified frames.
 
@@ -279,12 +255,15 @@ class Optitracker(object):
         if num_frames == 0:
             num_frames = self.__window_size
 
-        # frames = self.__query_frames(num_frames)
-        # return self.__calc_vector_distance(frames=frames)
-        pass
+        frames = self.__query_frames(num_frames)
+
+        distances = self.__calc_vector_distance(frames, axis)
+
+        return np.sum(distances['distance'], dtype=np.float64)
 
     def __calc_vector_velocity(
-        self, frames: np.ndarray = np.array([])
+        self, frames: np.ndarray = np.array([]),
+        axis: str | None = None
     ) -> np.ndarray:
         """
         Calculate velocity using position data over the specified window.
@@ -301,7 +280,7 @@ class Optitracker(object):
         if len(frames) == 0:
             frames = self.__query_frames()
 
-        distances = self.__calc_vector_distance(frames)
+        distances = self.__calc_vector_distance(frames, axis)
         velocities = np.ndarray(
             len(distances),
             dtype=[
@@ -318,16 +297,18 @@ class Optitracker(object):
         return velocities
 
     def __calc_vector_distance(
-        self, frames: np.ndarray = np.array([])
+        self, frames: np.ndarray = np.array([]),
+        axis: str | None = None
     ) -> np.ndarray:
         """
         Calculate Euclidean distance between first and last frames.
 
         Args:
             frames (np.ndarray, optional): Array of frame data; queries last window_size frames if empty.
+            axis (str, optional): Along which axis to calculate velocity; defaults to None (uses self.__primary_axis)
 
         Returns:
-            float: Euclidean distance
+            float: Euclidean distance in mm
         """
         positions = self.__calc_position(frames)
         distances = np.ndarray(
@@ -338,19 +319,36 @@ class Optitracker(object):
             ],
         )
 
+        # if axis is not None and axis not in ['x', 'y', 'z', 'all']:
+        #     raise ValueError('Axis must be one of: x, y, z, all')
+
+        if axis is None:
+            axis = self.__primary_axis
+
+        print(f'Axis: {axis}')
+
+
         distances['frame_number'][:] = positions['frame_number'][1:]
         for i in range(len(positions) - 1):
             distances['frame_number'][i] = positions['frame_number'][i + 1]
 
-            variance = np.sum(
-                [
-                    np.diff(positions['pos_x'][i : i + 2]) ** 2,
-                    np.diff(positions['pos_y'][i : i + 2]) ** 2,
-                    np.diff(positions['pos_z'][i : i + 2]) ** 2,
-                ]
-            )
-            deviation = np.sqrt(variance)
+            if axis == 'all':
+                variance = np.sum(
+                    [
+                        np.diff(positions['pos_x'][i : i + 2]) ** 2,
+                        np.diff(positions['pos_y'][i : i + 2]) ** 2,
+                        np.diff(positions['pos_z'][i : i + 2]) ** 2,
+                    ]
+                )
+                deviation = np.sqrt(variance)
+
+            else:
+                deviation = np.diff(positions[f'pos_{axis}'][i : i + 2])
+
             distances['distance'][i] = deviation
+        
+        if axis:
+            pass
 
         return distances
 
@@ -404,9 +402,41 @@ class Optitracker(object):
 
         return positions
 
-    def __query_frames(
-        self, num_frames: int = 0, console_logging: bool | None = None
-    ) -> np.ndarray:
+    def __validate_data(self, data: np.ndarray) -> None:
+        """Validate the format of the data array.
+
+        Args:
+            data (np.ndarray): Array of frame data to validate
+
+        Raises:
+            ValueError: If data is empty
+            ValueError: If data is not a structured array
+            ValueError: If data does not contain expected fields
+            ValueError: If datafields are not of expected types
+        """
+        if len(data) == 0:
+            raise ValueError('No data was provided.')
+
+        if not data.dtype.names:
+            raise ValueError('Data must be a structured array.')
+
+        if any(
+            col not in data.dtype.names
+            for col in ['frame_number', 'pos_x', 'pos_y', 'pos_z']
+        ):
+            raise ValueError(
+                'Data must contain fields: frame_number, pos_x, pos_y, pos_z.'
+            )
+
+        if any(
+            data[col].dtype not in ['f8', 'i8']
+            for col in ['frame_number', 'pos_x', 'pos_y', 'pos_z']
+        ):
+            raise ValueError(
+                'Data fields must be of types: float64 (for position) or int64 (for frame number).'
+        )
+
+    def __query_frames(self, num_frames: int = 0) -> np.ndarray:
         """Load and process frame data from the tracking data file.
 
         Reads position data from CSV file, validates format, and applies rescaling.
@@ -474,6 +504,8 @@ class Optitracker(object):
             self.__data_dir, delimiter=',', dtype=dtype_map, skip_header=1
         )
 
+        # self.__validate_data(frames)
+
         # Rescale position data (e.g., convert meters to millimeters)
         if self.__rescale_by <= 0.0:
             raise ValueError('Rescale factor must be positive')
@@ -493,3 +525,29 @@ class Optitracker(object):
         frames = frames[frames['frame_number'] > lookback]
 
         return frames
+
+    def __write_frames(self, frames: dict) -> None:
+        """Write marker set data to CSV file.
+
+        Args:
+            marker_set (dict): Dictionary containing marker data to be written.
+                Expected format: {'markers': [{'key1': val1, ...}, ...]}
+        """
+
+        if frames.get("label") == "hand":
+            # Append data to trial-specific CSV file
+            fname = self.__data_dir
+            header = list(frames["markers"][0].keys())
+
+            # if file doesn't exist, create it and write header
+            if not os.path.exists(fname):
+                with open(fname, "w", newline="") as file:
+                    writer = DictWriter(file, fieldnames=header)
+                    writer.writeheader()
+
+            # append marker data to file
+            with open(fname, "a", newline="") as file:
+                writer = DictWriter(file, fieldnames=header)
+                for marker in frames.get("markers", None):
+                    if marker is not None:
+                        writer.writerow(marker)
