@@ -49,7 +49,7 @@ class Optitracker(object):
         Args:
             marker_count (int): Number of markers being tracked
             sample_rate (int, optional): Data sampling rate in Hz. Defaults to 120.
-            window_size (int, optional): Number of frames for temporal calculations. Defaults to 5.
+           window_size (int, optional): Number of frames for temporal calculations. Defaults to 5.
             data_dir (str, optional): Path to the tracking data file. Defaults to "".
             rescale_by (float, optional): Factor to rescale position values. Defaults to 1000.
             init_natnet (bool, optional): Whether to initialize NatNet client. Defaults to True.
@@ -133,6 +133,10 @@ class Optitracker(object):
         """Get the window size."""
         return self.__window_size
 
+    def is_listening(self) -> bool:
+        """Return whether the NatNet client is currently listening."""
+        return self.__natnet_listening
+
     def start_listening(self) -> bool:
         """
         Start listening for NatNet data.
@@ -186,7 +190,7 @@ class Optitracker(object):
         self,
         num_frames: int = 0,
         axis: str | None = None,
-    ) -> float:
+    ) -> np.float64:
         """Calculate the current velocity from position data.
 
         Computes velocity by measuring displacement over time using the specified
@@ -212,7 +216,11 @@ class Optitracker(object):
 
         velocities = self.__calc_vector_velocity(frames, axis)
 
-        return np.mean(velocities['velocity'], dtype=np.float64)
+        mu_velocity = np.mean(velocities['velocity'], dtype=np.float64)
+        print(f'Mean velocity: {mu_velocity}')
+        self.console.log(log_locals=True)
+
+        return mu_velocity
 
     def position(
         self,
@@ -238,7 +246,7 @@ class Optitracker(object):
         self,
         num_frames: int = 0,
         axis: str | None = None,
-    ) -> float:
+    ) -> np.float64:
         """Calculate the Euclidean distance traveled over specified frames.
 
         Args:
@@ -341,6 +349,7 @@ class Optitracker(object):
                     ]
                 )
                 deviation = np.sqrt(variance)
+                # TODO: retain sign of deviation
 
             else:
                 deviation = np.diff(positions[f'pos_{axis}'][i : i + 2])
