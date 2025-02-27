@@ -99,7 +99,9 @@ class Optitracker(object):
             if display_ppi is not None:
                 self.__display_ppi = display_ppi
             else:
-                raise ValueError('Display PPI must be specified for mouse tracking.')
+                raise ValueError(
+                    'Display PPI must be specified for mouse tracking.'
+                )
 
             self.__data_dir = 'mouse_tracking.csv'
             self.__mouse_thread = None
@@ -335,7 +337,7 @@ class Optitracker(object):
 
         distances = self.__calc_vector_distance(frames, axis)
 
-        return np.sum(distances['distance'], dtype=np.float64) # type: ignore
+        return np.sum(distances['distance'], dtype=np.float64)   # type: ignore
 
     def __calc_vector_velocity(
         self, frames: np.ndarray = np.array([]), axis: str | None = None
@@ -603,7 +605,7 @@ class Optitracker(object):
 
         return frames
 
-    def __write_frames(self, frames: dict | np.ndarray | None ) -> None:
+    def __write_frames(self, frames: dict | np.ndarray | None) -> None:
         """Write marker set data to CSV file.
 
         Args:
@@ -616,7 +618,7 @@ class Optitracker(object):
             header = list(frames.dtype.names)
 
             with open(fname, 'a', newline='') as file:
-                np.savetxt(file, header, delimiter=',', fmt='%s')
+                np.savetxt(file, frames, delimiter=',', fmt='%s')
 
         else:
             if type(frames) is dict:
@@ -638,11 +640,13 @@ class Optitracker(object):
                             if marker is not None:
                                 writer.writerow(marker)
             else:
-                raise ValueError('Frames of unexpected type. Should be dict or np.ndarray')
+                raise ValueError(
+                    'Frames of unexpected type. Should be dict or np.ndarray'
+                )
 
     def __mouse_tracking_loop(self) -> None:
         """Continuously track and write mouse position data."""
-        
+
         while not self.__stop_mouse_thread:
             # Get and write mouse position
             self.__write_frames(None)
