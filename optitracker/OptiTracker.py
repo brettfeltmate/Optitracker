@@ -43,6 +43,8 @@ class Optitracker(object):
         rescale_by: int | float = 1000,
         init_natnet: bool = True,
         primary_axis: str = 'z',
+        use_mouse: bool = False,
+        display_ppi: int | None = None,
     ):
         """Initialize the OptiTracker object.
 
@@ -65,6 +67,8 @@ class Optitracker(object):
         """
         self.console = Console()
 
+        self.__is_listening = False
+
         if marker_count <= 0:
             raise ValueError('Marker count must be positive.')
         self.__marker_count = marker_count
@@ -83,8 +87,16 @@ class Optitracker(object):
 
         self.__data_dir = data_dir
 
+        self.__use_mouse = use_mouse
+
+        if self.__use_mouse:
+            init_natnet = False
+            if display_ppi is not None:
+                self.__display_ppi = display_ppi
+            else:
+                raise ValueError('Display PPI must be specified for mouse tracking.')
+
         if init_natnet:
-            self.__natnet_listening = False
             self.__natnet = NatNetClient()
             self.__natnet.listeners['marker'] = self.__write_frames  # type: ignore
 
@@ -133,9 +145,42 @@ class Optitracker(object):
         """Get the window size."""
         return self.__window_size
 
+    # def __init_mouse_tracking(self) -> None:
+    #     print('Mouse tracking initialized.')
+    #     import pyautogui
+    #
+    #     # disable natnet communications
+    #     self.__natnet = None
+    #
+    #     self.__screen_width, self.__screen_height = pyautogui.size()
+
+    def __mouse_pos(self) -> np.ndarray:
+        self.__mouse_frame += 1
+
+        import pyautogui
+
+        frame = np.ndarray(
+            1,
+            dtype=[
+                ('frame_number', 'i8'),
+                ('pos_x', 'f8'),
+                ('pos_y', 'f8'),
+                ('pos_z', 'f8'),
+            ],
+        )
+
+        raw_pos = pyautogui.position()
+
+        frame['frame_number'][:] = self.__mouse_frame
+        frame['pos_x'][:] = float(raw_pos[0]) / (self.__display_ppi / 25.4)
+        frame['pos_y'][:] = float(0)
+        frame['pos_z'][:] = float(raw_pos[1]) / (self.__display_ppi / 25.4)
+
+        return frame
+
     def is_listening(self) -> bool:
         """Return whether the NatNet client is currently listening."""
-        return self.__natnet_listening
+        return self.__is_listening
 
     def start_listening(self) -> bool:
         """
@@ -144,25 +189,42 @@ class Optitracker(object):
         Raises:
             ValueError: If data directory is unset
         """
-        if self.__natnet is None:
-            raise RuntimeError('NatNet client not initialized.')
+
+        if self.__use_mouse:
+            self.__data_dir = 'mouse_tracking.csv'
+            self.__mouse_frame = 0
 
         if self.__data_dir == '':
             raise ValueError('No data directory was set.')
 
-        if not self.__natnet_listening:
-            self.__natnet_listening = self.__natnet.startup()
+        if not self.__is_listening:
 
-        return self.__natnet_listening
+            if self.__natnet is None:
+                if not self.__use_mouse:
+                    raise RuntimeError('NatNet client not initialized.')
+
+                elif self.__use_mouse:
+                    self.__is_listening = True
+
+            else:
+                self.__is_listening = self.__natnet.startup()
+
+        return self.__is_listening
 
     def stop_listening(self) -> None:
         """Stop listening for NatNet data."""
-        if self.__natnet is None:
-            raise RuntimeError('NatNet client not initialized.')
 
-        if self.__natnet_listening:
-            self.__natnet.shutdown()
-            self.__natnet_listening = False
+        if not self.__use_mouse:
+            if self.__natnet is None:
+                raise RuntimeError('NatNet client not initialized.')
+
+            if self.__is_listening:
+                self.__natnet.shutdown()
+                self.__is_listening = False
+        else:
+            if os.path.exists(self.__data_dir):
+                os.remove(self.__data_dir)
+            self.__is_listening = False
 
     def query_frames(self, num_frames: int = 0) -> np.ndarray:
         """Query the most recent frames from the tracking data.
@@ -216,15 +278,10 @@ class Optitracker(object):
 
         velocities = self.__calc_vector_velocity(frames, axis)
 
-        mu_velocity = np.mean(velocities['velocity'], dtype=np.float64)
-        print(f'Mean velocity: {mu_velocity}')
-        self.console.log(log_locals=True)
-
-        return mu_velocity
+        return np.mean(velocities['velocity'], dtype=np.float64)  # type: ignore
 
     def position(
         self,
-        num_frames: int = 1,
     ) -> np.ndarray:
         """Calculates and returns mean position(s) for the last n frames.
 
@@ -267,11 +324,10 @@ class Optitracker(object):
 
         distances = self.__calc_vector_distance(frames, axis)
 
-        return np.sum(distances['distance'], dtype=np.float64)
+        return np.sum(distances['distance'], dtype=np.float64) # type: ignore
 
     def __calc_vector_velocity(
-        self, frames: np.ndarray = np.array([]),
-        axis: str | None = None
+        self, frames: np.ndarray = np.array([]), axis: str | None = None
     ) -> np.ndarray:
         """
         Calculate velocity using position data over the specified window.
@@ -305,8 +361,7 @@ class Optitracker(object):
         return velocities
 
     def __calc_vector_distance(
-        self, frames: np.ndarray = np.array([]),
-        axis: str | None = None
+        self, frames: np.ndarray = np.array([]), axis: str | None = None
     ) -> np.ndarray:
         """
         Calculate Euclidean distance between first and last frames.
@@ -335,7 +390,6 @@ class Optitracker(object):
 
         print(f'Axis: {axis}')
 
-
         distances['frame_number'][:] = positions['frame_number'][1:]
         for i in range(len(positions) - 1):
             distances['frame_number'][i] = positions['frame_number'][i + 1]
@@ -355,7 +409,7 @@ class Optitracker(object):
                 deviation = np.diff(positions[f'pos_{axis}'][i : i + 2])
 
             distances['distance'][i] = deviation
-        
+
         if axis:
             pass
 
@@ -381,6 +435,9 @@ class Optitracker(object):
         Note:
             If smooth=True, means are filtered using the __smooth method
         """
+        if self.__use_mouse:
+            return frames
+
         if len(frames) == 0:
             frames = self.__query_frames()
 
@@ -411,39 +468,39 @@ class Optitracker(object):
 
         return positions
 
-    def __validate_data(self, data: np.ndarray) -> None:
-        """Validate the format of the data array.
-
-        Args:
-            data (np.ndarray): Array of frame data to validate
-
-        Raises:
-            ValueError: If data is empty
-            ValueError: If data is not a structured array
-            ValueError: If data does not contain expected fields
-            ValueError: If datafields are not of expected types
-        """
-        if len(data) == 0:
-            raise ValueError('No data was provided.')
-
-        if not data.dtype.names:
-            raise ValueError('Data must be a structured array.')
-
-        if any(
-            col not in data.dtype.names
-            for col in ['frame_number', 'pos_x', 'pos_y', 'pos_z']
-        ):
-            raise ValueError(
-                'Data must contain fields: frame_number, pos_x, pos_y, pos_z.'
-            )
-
-        if any(
-            data[col].dtype not in ['f8', 'i8']
-            for col in ['frame_number', 'pos_x', 'pos_y', 'pos_z']
-        ):
-            raise ValueError(
-                'Data fields must be of types: float64 (for position) or int64 (for frame number).'
-        )
+    # def __validate_data(self, data: np.ndarray) -> None:
+    #     """Validate the format of the data array.
+    #
+    #     Args:
+    #         data (np.ndarray): Array of frame data to validate
+    #
+    #     Raises:
+    #         ValueError: If data is empty
+    #         ValueError: If data is not a structured array
+    #         ValueError: If data does not contain expected fields
+    #         ValueError: If datafields are not of expected types
+    #     """
+    #     if len(data) == 0:
+    #         raise ValueError('No data was provided.')
+    #
+    #     if not data.dtype.names:
+    #         raise ValueError('Data must be a structured array.')
+    #
+    #     if any(
+    #         col not in data.dtype.names
+    #         for col in ['frame_number', 'pos_x', 'pos_y', 'pos_z']
+    #     ):
+    #         raise ValueError(
+    #             'Data must contain fields: frame_number, pos_x, pos_y, pos_z.'
+    #         )
+    #
+    #     if any(
+    #         data[col].dtype not in ['f8', 'i8']
+    #         for col in ['frame_number', 'pos_x', 'pos_y', 'pos_z']
+    #     ):
+    #         raise ValueError(
+    #             'Data fields must be of types: float64 (for position) or int64 (for frame number).'
+    #         )
 
     def __query_frames(self, num_frames: int = 0) -> np.ndarray:
         """Load and process frame data from the tracking data file.
@@ -515,13 +572,13 @@ class Optitracker(object):
 
         # self.__validate_data(frames)
 
-        # Rescale position data (e.g., convert meters to millimeters)
-        if self.__rescale_by <= 0.0:
-            raise ValueError('Rescale factor must be positive')
+        if not self.__use_mouse:
+            # Rescale position data (e.g., convert meters to millimeters)
+            if self.__rescale_by <= 0.0:
+                raise ValueError('Rescale factor must be positive')
 
-        # TODO: make this a param
-        for col in ['pos_x', 'pos_y', 'pos_z']:
-            frames[col][:] = frames[col][:] * self.__rescale_by
+            for col in ['pos_x', 'pos_y', 'pos_z']:
+                frames[col][:] = frames[col][:] * self.__rescale_by
 
         if num_frames == 0:
             num_frames = self.__window_size
@@ -535,28 +592,40 @@ class Optitracker(object):
 
         return frames
 
-    def __write_frames(self, frames: dict) -> None:
+    def __write_frames(self, frames: dict | np.ndarray | None ) -> None:
         """Write marker set data to CSV file.
 
         Args:
             marker_set (dict): Dictionary containing marker data to be written.
                 Expected format: {'markers': [{'key1': val1, ...}, ...]}
         """
-
-        if frames.get("label") == "hand":
-            # Append data to trial-specific CSV file
+        if self.__use_mouse:
+            frames = self.__mouse_pos()
             fname = self.__data_dir
-            header = list(frames["markers"][0].keys())
+            header = list(frames.dtype.names)
 
-            # if file doesn't exist, create it and write header
-            if not os.path.exists(fname):
-                with open(fname, "w", newline="") as file:
-                    writer = DictWriter(file, fieldnames=header)
-                    writer.writeheader()
+            with open(fname, 'a', newline='') as file:
+                with open(fname, 'w', newline='') as file:
+                    np.savetxt(file, header, delimiter=',', fmt='%s')
 
-            # append marker data to file
-            with open(fname, "a", newline="") as file:
-                writer = DictWriter(file, fieldnames=header)
-                for marker in frames.get("markers", None):
-                    if marker is not None:
-                        writer.writerow(marker)
+        else:
+            if type(frames) is dict:
+                if frames.get('label') == 'hand':
+                    # Append data to trial-specific CSV file
+                    fname = self.__data_dir
+                    header = list(frames['markers'][0].keys())
+
+                    # if file doesn't exist, create it and write header
+                    if not os.path.exists(fname):
+                        with open(fname, 'w', newline='') as file:
+                            writer = DictWriter(file, fieldnames=header)
+                            writer.writeheader()
+
+                    # append marker data to file
+                    with open(fname, 'a', newline='') as file:
+                        writer = DictWriter(file, fieldnames=header)
+                        for marker in frames.get('markers', None):
+                            if marker is not None:
+                                writer.writerow(marker)
+            else:
+                raise ValueError('Frames of unexpected type. Should be dict or np.ndarray')
