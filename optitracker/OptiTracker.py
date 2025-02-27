@@ -112,10 +112,6 @@ class Optitracker(object):
             if os.path.exists(self.__data_dir):
                 os.remove(self.__data_dir)
 
-            with open(self.__data_dir, 'w', newline='') as file:
-                writer = DictWriter(file, fieldnames=['frame_number', 'pos_x', 'pos_y', 'pos_z'])
-                writer.writeheader()
-
         if init_natnet:
             self.__natnet = NatNetClient()
             self.__natnet.listeners['marker'] = self.__write_frames  # type: ignore
@@ -625,6 +621,10 @@ class Optitracker(object):
             frames = self.__mouse_pos()
             fname = self.__data_dir
             header = list(frames.dtype.names)
+
+            with open(self.__data_dir, 'w', newline='') as file:
+                writer = DictWriter(file, fieldnames=['frame_number', 'pos_x', 'pos_y', 'pos_z'])
+                writer.writeheader()
 
             with open(fname, 'a', newline='') as file:
                 np.savetxt(file, frames, delimiter=',', fmt='%s')
