@@ -622,9 +622,10 @@ class Optitracker(object):
             fname = self.__data_dir
             header = list(frames.dtype.names)
 
-            with open(self.__data_dir, 'w', newline='') as file:
-                writer = DictWriter(file, fieldnames=['frame_number', 'pos_x', 'pos_y', 'pos_z'])
-                writer.writeheader()
+            if not os.path.exists(fname):
+                with open(self.__data_dir, 'w', newline='') as file:
+                    writer = DictWriter(file, fieldnames=['frame_number', 'pos_x', 'pos_y', 'pos_z'])
+                    writer.writeheader()
 
             with open(fname, 'a', newline='') as file:
                 np.savetxt(file, frames, delimiter=',', fmt='%s')
