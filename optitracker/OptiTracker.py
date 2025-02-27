@@ -109,6 +109,10 @@ class Optitracker(object):
             self.__mouse_thread = None
             self.__stop_mouse_thread = False
 
+            with open(self.__data_dir, 'w', newline='') as file:
+                writer = DictWriter(file, fieldnames=['frame_number', 'pos_x', 'pos_y', 'pos_z'])
+                writer.writeheader()
+
         if init_natnet:
             self.__natnet = NatNetClient()
             self.__natnet.listeners['marker'] = self.__write_frames  # type: ignore
