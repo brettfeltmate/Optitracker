@@ -92,6 +92,7 @@ class Optitracker(object):
         self.__use_mouse = use_mouse
 
         if self.__use_mouse:
+            import pyautogui
 
             init_natnet = False
             self.__natnet = None
@@ -103,6 +104,7 @@ class Optitracker(object):
                     'Display PPI must be specified for mouse tracking.'
                 )
 
+            self.__screen_width, self.__screen_height = pyautogui.size()
             self.__data_dir = 'mouse_tracking.csv'
             self.__mouse_thread = None
             self.__stop_mouse_thread = False
@@ -182,7 +184,7 @@ class Optitracker(object):
         frame['frame_number'][:] = self.__mouse_frame
         frame['pos_x'][:] = float(raw_pos[0]) / (self.__display_ppi / 25.4)
         frame['pos_y'][:] = float(0)
-        frame['pos_z'][:] = float(raw_pos[1]) / (self.__display_ppi / 25.4)
+        frame['pos_z'][:] = self.__screen_height - float(raw_pos[1]) / (self.__display_ppi / 25.4)
 
         return frame
 
