@@ -1,3 +1,5 @@
+from threading import Thread
+import time
 import os
 import numpy as np
 from csv import DictWriter
@@ -90,18 +92,22 @@ class Optitracker(object):
         self.__use_mouse = use_mouse
 
         if self.__use_mouse:
+
             init_natnet = False
+            self.__natnet = None
+
             if display_ppi is not None:
                 self.__display_ppi = display_ppi
             else:
                 raise ValueError('Display PPI must be specified for mouse tracking.')
 
+            self.__data_dir = 'mouse_tracking.csv'
+            self.__mouse_thread = None
+            self.__stop_mouse_thread = False
+
         if init_natnet:
             self.__natnet = NatNetClient()
             self.__natnet.listeners['marker'] = self.__write_frames  # type: ignore
-
-        else:
-            self.__natnet = None
 
         if primary_axis == '' or primary_axis is None:
             raise ValueError('Primary axis must be specified.')
@@ -189,23 +195,20 @@ class Optitracker(object):
         Raises:
             ValueError: If data directory is unset
         """
-
-        if self.__use_mouse:
-            self.__data_dir = 'mouse_tracking.csv'
-            self.__mouse_frame = 0
-
         if self.__data_dir == '':
             raise ValueError('No data directory was set.')
 
-        if not self.__is_listening:
+        if self.__use_mouse:
+            self.__mouse_frame = 0
 
+            self.__stop_mouse_thread = False
+            self.__mouse_thread = Thread(target=self.__mouse_tracking_loop)
+            self.__mouse_thread.start()
+            self.__is_listening = True
+
+        else:
             if self.__natnet is None:
-                if not self.__use_mouse:
-                    raise RuntimeError('NatNet client not initialized.')
-
-                elif self.__use_mouse:
-                    self.__is_listening = True
-
+                raise RuntimeError('NatNet client not initialized.')
             else:
                 self.__is_listening = self.__natnet.startup()
 
@@ -222,8 +225,16 @@ class Optitracker(object):
                 self.__natnet.shutdown()
                 self.__is_listening = False
         else:
+
+            self.__stop_mouse_thread = True
+
+            if self.__mouse_thread is not None:
+                self.__mouse_thread.join()
+                self.__mouse_thread = None
+
             if os.path.exists(self.__data_dir):
                 os.remove(self.__data_dir)
+
             self.__is_listening = False
 
     def query_frames(self, num_frames: int = 0) -> np.ndarray:
@@ -605,8 +616,7 @@ class Optitracker(object):
             header = list(frames.dtype.names)
 
             with open(fname, 'a', newline='') as file:
-                with open(fname, 'w', newline='') as file:
-                    np.savetxt(file, header, delimiter=',', fmt='%s')
+                np.savetxt(file, header, delimiter=',', fmt='%s')
 
         else:
             if type(frames) is dict:
@@ -629,3 +639,12 @@ class Optitracker(object):
                                 writer.writerow(marker)
             else:
                 raise ValueError('Frames of unexpected type. Should be dict or np.ndarray')
+
+    def __mouse_tracking_loop(self) -> None:
+        """Continuously track and write mouse position data."""
+        
+        while not self.__stop_mouse_thread:
+            # Get and write mouse position
+            self.__write_frames(None)
+            # Control sampling rate
+            time.sleep(1.0 / self.__sample_rate)
