@@ -158,15 +158,6 @@ class Optitracker(object):
         """Get the window size."""
         return self.__window_size
 
-    # def __init_mouse_tracking(self) -> None:
-    #     print('Mouse tracking initialized.')
-    #     import pyautogui
-    #
-    #     # disable natnet communications
-    #     self.__natnet = None
-    #
-    #     self.__screen_width, self.__screen_height = pyautogui.size()
-
     def __mouse_pos(self) -> np.ndarray:
         self.__mouse_frame += 1
 
@@ -406,8 +397,6 @@ class Optitracker(object):
         if axis is None:
             axis = self.__primary_axis
 
-        print(f'Axis: {axis}')
-
         distances['frame_number'][:] = positions['frame_number'][1:]
         for i in range(len(positions) - 1):
             distances['frame_number'][i] = positions['frame_number'][i + 1]
@@ -459,8 +448,6 @@ class Optitracker(object):
         if len(frames) == 0:
             frames = self.__query_frames()
 
-        print('\n\n | __column_means START | \n\n')
-
         # Create output array with the correct dtype
         positions = np.zeros(
             len(frames) // self.__marker_count,
@@ -479,10 +466,6 @@ class Optitracker(object):
             positions[axis][:] = np.mean(
                 frames[axis].reshape(-1, self.__marker_count), axis=1
             )
-
-        print('Positions: ', positions)
-
-        print('\n\n | __column_means END | \n\n')
 
         return positions
 
