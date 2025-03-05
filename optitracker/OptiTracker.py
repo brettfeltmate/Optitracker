@@ -114,7 +114,7 @@ class Optitracker(object):
 
         if init_natnet:
             self.__natnet = NatNetClient()
-            self.__natnet.listeners['marker'] = self.__write_frames  # type: ignore
+            self.__natnet.listeners['marker'] = self.__write  # type: ignore
 
         if primary_axis == '' or primary_axis is None:
             raise ValueError('Primary axis must be specified.')
@@ -158,7 +158,7 @@ class Optitracker(object):
         """Get the window size."""
         return self.__window_size
 
-    def __mouse_pos(self) -> np.ndarray:
+    def __get_mouse_position(self) -> np.ndarray:
         self.__mouse_frame += 1
 
         import pyautogui
@@ -200,7 +200,7 @@ class Optitracker(object):
             self.__mouse_frame = 0
 
             self.__stop_mouse_thread = False
-            self.__mouse_thread = Thread(target=self.__mouse_tracking_loop)
+            self.__mouse_thread = Thread(target=self.__track_mouse)
             self.__mouse_thread.start()
             self.__is_listening = True
 
@@ -253,7 +253,7 @@ class Optitracker(object):
             FileNotFoundError: If data file does not exist
             ValueError: If num_frames is negative
         """
-        return self.__query_frames(
+        return self.__read(
             num_frames=num_frames,
         )
 
@@ -283,7 +283,7 @@ class Optitracker(object):
         if num_frames < 2:
             raise ValueError('Window size must cover at least two frames.')
 
-        frames = self.__query_frames(num_frames)
+        frames = self.__read(num_frames)
 
         velocities = self.__calc_vector_velocity(frames, axis)
 
@@ -304,7 +304,7 @@ class Optitracker(object):
                 - pos_y (float): Y coordinate
                 - pos_z (float): Z coordinate
         """
-        frame = self.__query_frames(num_frames=1)
+        frame = self.__read(num_frames=1)
 
         return self.__calc_position(frames=frame)
 
@@ -329,7 +329,7 @@ class Optitracker(object):
         if num_frames == 0:
             num_frames = self.__window_size
 
-        frames = self.__query_frames(num_frames)
+        frames = self.__read(num_frames)
 
         distances = self.__calc_vector_distance(frames, axis)
 
@@ -351,7 +351,7 @@ class Optitracker(object):
             raise ValueError('Window size must cover at least two frames.')
 
         if len(frames) == 0:
-            frames = self.__query_frames()
+            frames = self.__read()
 
         distances = self.__calc_vector_distance(frames, axis)
         velocities = np.ndarray(
@@ -446,7 +446,7 @@ class Optitracker(object):
             return frames
 
         if len(frames) == 0:
-            frames = self.__query_frames()
+            frames = self.__read()
 
         # Create output array with the correct dtype
         positions = np.zeros(
@@ -503,7 +503,7 @@ class Optitracker(object):
     #             'Data fields must be of types: float64 (for position) or int64 (for frame number).'
     #         )
 
-    def __query_frames(self, num_frames: int = 0) -> np.ndarray:
+    def __read(self, num_frames: int = 0) -> np.ndarray:
         """Load and process frame data from the tracking data file.
 
         Reads position data from CSV file, validates format, and applies rescaling.
@@ -531,11 +531,11 @@ class Optitracker(object):
         """
 
         if self.__data_dir == '':
-            raise ValueError('No data directory was set.')
+            raise ValueError('Must specify data directory.')
 
         if not os.path.exists(self.__data_dir):
             raise FileNotFoundError(
-                f'Data directory not found at:\n{self.__data_dir}'
+                f'No data directory present at:\n{self.__data_dir}'
             )
 
         if num_frames < 0:
@@ -549,7 +549,7 @@ class Optitracker(object):
             for col in ['frame_number', 'pos_x', 'pos_y', 'pos_z']
         ):
             raise ValueError(
-                'Data file must contain columns named frame_number, pos_x, pos_y, pos_z.'
+                'Data must contain columns frame_number, pos_x, pos_y, pos_z.'
             )
 
         dtype_map = [
@@ -593,7 +593,7 @@ class Optitracker(object):
 
         return frames
 
-    def __write_frames(self, frames: dict | np.ndarray | None) -> None:
+    def __write(self, frames: dict | np.ndarray | None) -> None:
         """Write marker set data to CSV file.
 
         Args:
@@ -601,7 +601,7 @@ class Optitracker(object):
                 Expected format: {'markers': [{'key1': val1, ...}, ...]}
         """
         if self.__use_mouse:
-            frames = self.__mouse_pos()
+            frames = self.__get_mouse_position()
             fname = self.__data_dir
             header = list(frames.dtype.names)
 
@@ -637,11 +637,11 @@ class Optitracker(object):
                     'Frames of unexpected type. Should be dict or np.ndarray'
                 )
 
-    def __mouse_tracking_loop(self) -> None:
+    def __track_mouse(self) -> None:
         """Continuously track and write mouse position data."""
 
         while not self.__stop_mouse_thread:
             # Get and write mouse position
-            self.__write_frames(None)
+            self.__write(None)
             # Control sampling rate
             time.sleep(1.0 / self.__sample_rate)

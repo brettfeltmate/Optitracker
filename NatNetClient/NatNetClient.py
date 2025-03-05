@@ -489,7 +489,7 @@ class NatNetClient:
         self,
         in_socket: socket.socket,
         command: int,
-        command_str: str | list[int],
+        command_str: str,
         address: tuple[Any, ...],
     ):
         if command in [
