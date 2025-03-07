@@ -42,11 +42,11 @@ class Optitracker(object):
         sample_rate: int = 120,
         window_size: int = 5,
         data_dir: str = '',
-        rescale_by: int | float = 1000,
+        rescale_by: int = 1000,
         init_natnet: bool = True,
         primary_axis: str = 'z',
         use_mouse: bool = False,
-        display_ppi: int | None = None,
+        display_ppi: int = -1,
     ):
         """Initialize the OptiTracker object.
 
@@ -97,7 +97,7 @@ class Optitracker(object):
             init_natnet = False
             self.__natnet = None
 
-            if display_ppi is not None:
+            if display_ppi <= 0:
                 self.__display_ppi = display_ppi
             else:
                 raise ValueError(
@@ -178,7 +178,9 @@ class Optitracker(object):
         frame['frame_number'][:] = self.__mouse_frame
         frame['pos_x'][:] = float(raw_pos[0]) / (self.__display_ppi / 25.4)
         frame['pos_y'][:] = float(0)
-        frame['pos_z'][:] = self.__screen_height - float(raw_pos[1]) / (self.__display_ppi / 25.4)
+        frame['pos_z'][:] = self.__screen_height - float(raw_pos[1]) / (
+            self.__display_ppi / 25.4
+        )
 
         return frame
 
@@ -260,7 +262,7 @@ class Optitracker(object):
     def velocity(
         self,
         num_frames: int = 0,
-        axis: str | None = None,
+        axis: str = 'z',
     ) -> np.float64:
         """Calculate the current velocity from position data.
 
@@ -308,11 +310,7 @@ class Optitracker(object):
 
         return self.__calc_position(frames=frame)
 
-    def distance(
-        self,
-        num_frames: int = 0,
-        axis: str | None = None,
-    ) -> np.float64:
+    def distance(self, num_frames: int = 0, axis: str = 'z') -> np.float64:
         """Calculate the Euclidean distance traveled over specified frames.
 
         Args:
@@ -336,7 +334,7 @@ class Optitracker(object):
         return np.sum(distances['distance'], dtype=np.float64)   # type: ignore
 
     def __calc_vector_velocity(
-        self, frames: np.ndarray = np.array([]), axis: str | None = None
+        self, frames: np.ndarray = np.array([]), axis: str = 'z'
     ) -> np.ndarray:
         """
         Calculate velocity using position data over the specified window.
@@ -370,7 +368,7 @@ class Optitracker(object):
         return velocities
 
     def __calc_vector_distance(
-        self, frames: np.ndarray = np.array([]), axis: str | None = None
+        self, frames: np.ndarray = np.array([]), axis: str = 'z'
     ) -> np.ndarray:
         """
         Calculate Euclidean distance between first and last frames.
@@ -593,7 +591,7 @@ class Optitracker(object):
 
         return frames
 
-    def __write(self, frames: dict | np.ndarray | None) -> None:
+    def __write(self, frames) -> None:
         """Write marker set data to CSV file.
 
         Args:
@@ -607,7 +605,10 @@ class Optitracker(object):
 
             if not os.path.exists(fname):
                 with open(self.__data_dir, 'w', newline='') as file:
-                    writer = DictWriter(file, fieldnames=['frame_number', 'pos_x', 'pos_y', 'pos_z'])
+                    writer = DictWriter(
+                        file,
+                        fieldnames=['frame_number', 'pos_x', 'pos_y', 'pos_z'],
+                    )
                     writer.writeheader()
 
             with open(fname, 'a', newline='') as file:
