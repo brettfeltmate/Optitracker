@@ -53,7 +53,7 @@ class Optitracker(object):
         Args:
             marker_count (int): Number of markers being tracked
             sample_rate (int, optional): Data sampling rate in Hz. Defaults to 120.
-           window_size (int, optional): Number of frames for temporal calculations. Defaults to 5.
+            window_size (int, optional): Number of frames for temporal calculations. Defaults to 5.
             data_dir (str, optional): Path to the tracking data file. Defaults to "".
             rescale_by (float, optional): Factor to rescale position values. Defaults to 1000.
             init_natnet (bool, optional): Whether to initialize NatNet client. Defaults to True.
@@ -615,28 +615,28 @@ class Optitracker(object):
                 np.savetxt(file, frames, delimiter=',', fmt='%s')
 
         else:
-            if type(frames) is dict:
-                if frames.get('label') == 'hand':
-                    # Append data to trial-specific CSV file
-                    fname = self.__data_dir
-                    header = list(frames['markers'][0].keys())
+            # if type(frames) is dict:
+            if frames.get('label') == 'hand':
+                # Append data to trial-specific CSV file
+                fname = self.__data_dir
+                header = list(frames['markers'][0].keys())
 
-                    # if file doesn't exist, create it and write header
-                    if not os.path.exists(fname):
-                        with open(fname, 'w', newline='') as file:
-                            writer = DictWriter(file, fieldnames=header)
-                            writer.writeheader()
-
-                    # append marker data to file
-                    with open(fname, 'a', newline='') as file:
+                # if file doesn't exist, create it and write header
+                if not os.path.exists(fname):
+                    with open(fname, 'w', newline='') as file:
                         writer = DictWriter(file, fieldnames=header)
-                        for marker in frames.get('markers', None):
-                            if marker is not None:
-                                writer.writerow(marker)
-            else:
-                raise ValueError(
-                    'Frames of unexpected type. Should be dict or np.ndarray'
-                )
+                        writer.writeheader()
+
+                # append marker data to file
+                with open(fname, 'a', newline='') as file:
+                    writer = DictWriter(file, fieldnames=header)
+                    for marker in frames.get('markers', None):
+                        if marker is not None:
+                            writer.writerow(marker)
+            # else:
+            #     raise ValueError(
+            #         'Frames of unexpected type. Should be dict or np.ndarray'
+            #     )
 
     def __track_mouse(self) -> None:
         """Continuously track and write mouse position data."""
