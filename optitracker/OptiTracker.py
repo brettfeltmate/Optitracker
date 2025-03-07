@@ -145,7 +145,7 @@ class Optitracker(object):
         return self.__sample_rate
 
     @property
-    def rescale_by(self) -> int | float:
+    def rescale_by(self) -> int:
         """Get the rescaling factor used to convert position data.
 
         This factor is multiplied with all position values after reading from file.
