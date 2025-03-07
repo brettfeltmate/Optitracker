@@ -208,7 +208,7 @@ class NatNetClient:
 
         if self.settings['requested_natnet_version'][:2] == [0, 0]:
             print(
-                f"Resetting requested version to {self.settings['server_stream_version']} from {self.settings['nat_net_requested_version']}"
+                f"Resetting requested version to {self.settings['server_stream_version']} from {self.settings['requested_natnet_version']}"
             )
             self.settings['requested_natnet_version'] = self.settings[
                 'server_stream_version'
