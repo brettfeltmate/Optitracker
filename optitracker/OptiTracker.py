@@ -296,9 +296,6 @@ class Optitracker(object):
     ) -> np.ndarray:
         """Calculates and returns mean position(s) for the last n frames.
 
-        Args:
-            num_frames (int, optional): Number of frames to calculate mean position over. Defaults to 1.
-
         Returns:
             np.ndarray: Structured array containing the mean position with fields:
                 - frame_number (int): Frame identifier
