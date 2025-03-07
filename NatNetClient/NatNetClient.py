@@ -493,7 +493,7 @@ class NatNetClient:
         address: tuple[Any, ...],
     ):
         if command in [
-            self.message_ids['NAT_REQUEST_MODEDEF'],
+            self.message_ids['NAT_REQUEST_MODELDEF'],
             self.message_ids['NAT_REQUEST_FRAMEOFDATA'],
             self.message_ids['NAT_KEEPALIVE'],
         ]:
