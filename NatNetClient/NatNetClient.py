@@ -18,7 +18,7 @@ import socket
 import struct
 import time
 from threading import Thread
-from typing import Any, Callable, Union
+from typing import Any, Callable
 
 from ..MotiveStreamParser.MotiveStreamParser import MotiveStreamParser as Parser
 
@@ -50,7 +50,7 @@ class NatNetClient:
     print_level = 0
 
     def __init__(
-        self, instance_settings: dict[str, Union[str, int, bool]] = {}
+        self, instance_settings = {}
     ) -> None:
 
         self.settings = {
@@ -178,7 +178,7 @@ class NatNetClient:
 
         # pass
 
-    def __unpack_bitstream_info(self, bytestream: bytes) -> list[str]:
+    def __unpack_bitstream_info(self, bytestream: bytes):
         nn_version = []
         inString = bytestream.decode('utf-8')
         messageList = inString.split(',')
@@ -226,7 +226,7 @@ class NatNetClient:
         trace_mf(f"ServerVersion: {self.settings['server_version']}")
         return offset + 264
 
-    def __create_command_socket(self) -> Union[socket.socket, None]:
+    def __create_command_socket(self):
         try:
             if self.settings['use_multicast']:
                 result = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, 0)
@@ -258,7 +258,7 @@ class NatNetClient:
 
         return None
 
-    def __create_data_socket(self, port: int) -> Union[socket.socket, None]:
+    def __create_data_socket(self, port: int):
         try:
             result = socket.socket(
                 socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP
@@ -301,7 +301,7 @@ class NatNetClient:
         return None
 
     def __command_thread_callback(
-        self, in_socket: socket.socket, stop: Callable, gprint_level: int = 1
+        self, in_socket: socket.socket, stop, gprint_level: int = 1
     ) -> int:
         message_id_dict = {}
         if not self.settings['use_multicast']:
@@ -531,7 +531,7 @@ class NatNetClient:
         return ret_val
 
     def send_commands(
-        self, tmpcommands: list[str], print_results: bool = True
+        self, tmpcommands, print_results: bool = True
     ) -> None:
 
         for sz_command in tmpcommands:
