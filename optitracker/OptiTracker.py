@@ -104,7 +104,7 @@ class Optitracker(object):
                     'Display PPI must be specified for mouse tracking.'
                 )
 
-            self.__screen_width, self.__screen_height = pyautogui.size()
+            _, self.__screen_height = pyautogui.size()
             self.__data_dir = 'mouse_tracking.csv'
             self.__mouse_thread = None
             self.__stop_mouse_thread = False
@@ -588,7 +588,7 @@ class Optitracker(object):
 
         return frames
 
-    def __write(self, frames) -> None:
+    def __write(self, frames: np.ndarray) -> None:
         """Write marker set data to CSV file.
 
         Args:
